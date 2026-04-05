@@ -74,7 +74,7 @@ const isLoggedIn = !!Astro.locals.user;
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link
-			href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap"
+			href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@800&family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap"
 			rel="stylesheet"
 		/>
 		<title>{fullTitle}</title>
@@ -142,6 +142,7 @@ const isLoggedIn = !!Astro.locals.user;
 						<h4 class="footer-heading">Navigate</h4>
 						<ul class="footer-links">
 							<li><a href="/">Home</a></li>
+							<li><a href="/status">Status</a></li>
 							<li><a href="/posts">All Posts</a></li>
 							{
 								pages.slice(0, 3).map((page) => (
@@ -580,8 +581,9 @@ const isLoggedIn = !!Astro.locals.user;
 			}
 
 			.site-title {
+				font-family: "Fira Sans", var(--font-sans);
 				font-size: var(--font-size-lg);
-				font-weight: 600;
+				font-weight: 800;
 				color: var(--color-text);
 				text-decoration: none;
 				letter-spacing: var(--tracking-snug);
@@ -756,8 +758,9 @@ const isLoggedIn = !!Astro.locals.user;
 			}
 
 			.footer-logo {
+				font-family: "Fira Sans", var(--font-sans);
 				font-size: var(--font-size-lg);
-				font-weight: 600;
+				font-weight: 800;
 				color: var(--color-text);
 				text-decoration: none;
 				letter-spacing: var(--tracking-snug);
