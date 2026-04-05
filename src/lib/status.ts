@@ -13,6 +13,7 @@ export type StatusItem = {
 	uri: string;
 	slug: string;
 	text: string;
+	html: string;
 	date: Date;
 	blueskyUrl: string;
 	displayName: string;
@@ -28,6 +29,12 @@ export type StatusItem = {
 		fullsize: string;
 		alt: string;
 	}>;
+	external: {
+		uri: string;
+		title: string;
+		description: string;
+		domain: string;
+	} | null;
 };
 
 type RuntimeEnv = Record<string, unknown>;
@@ -212,6 +219,57 @@ function getImages(post: Record<string, any>) {
 	return imageViews.map((image: Record<string, any>) => normalizeImage(image));
 }
 
+function escapeHtml(value: string) {
+	return String(value || "")
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+}
+
+function autolinkHtml(value: string) {
+	return value.replace(/(https?:\/\/[^\s<]+)/g, (url) => {
+		const safeUrl = escapeHtml(url);
+		return `<a href="${safeUrl}" target="_blank" rel="noreferrer">${safeUrl}</a>`;
+	});
+}
+
+function renderTextHtml(text: string) {
+	const trimmed = String(text || "").trim();
+
+	if (!trimmed) {
+		return "";
+	}
+
+	return trimmed
+		.split(/\n{2,}/)
+		.map((paragraph) => `<p>${autolinkHtml(escapeHtml(paragraph)).replace(/\n/g, "<br>")}</p>`)
+		.join("");
+}
+
+function getExternal(post: Record<string, any>) {
+	const embed = post.embed || post.record?.embed;
+	if (!embed) return null;
+
+	const external = embed.external || embed.media?.external;
+	if (!external || !external.uri) return null;
+
+	let domain = external.uri;
+	try {
+		domain = new URL(external.uri).hostname.replace(/^www\./, "");
+	} catch {
+		// Keep the raw URI if parsing fails.
+	}
+
+	return {
+		uri: String(external.uri || ""),
+		title: String(external.title || domain),
+		description: String(external.description || ""),
+		domain,
+	};
+}
+
 function normalizeStatus(item: Record<string, any>, actor: string): StatusItem | null {
 	const post = item.post || {};
 	const author = post.author || {};
@@ -227,6 +285,7 @@ function normalizeStatus(item: Record<string, any>, actor: string): StatusItem |
 		uri: String(post.uri || ""),
 		slug: getRecordKey(post.uri),
 		text: String(record.text || ""),
+		html: renderTextHtml(String(record.text || "")),
 		date: new Date(String(record.createdAt || post.indexedAt || new Date().toISOString())),
 		blueskyUrl: getPostUrl(String(post.uri || ""), handle),
 		displayName: author.displayName || handle,
@@ -238,6 +297,7 @@ function normalizeStatus(item: Record<string, any>, actor: string): StatusItem |
 		quoteCount: Number(post.quoteCount || 0),
 		likeCount: Number(post.likeCount || 0),
 		images: getImages(post),
+		external: getExternal(post),
 	};
 }
 

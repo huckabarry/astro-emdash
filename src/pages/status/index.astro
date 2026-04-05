@@ -58,11 +58,7 @@ function formatDate(value: Date) {
 							</div>
 						</div>
 
-						<div class="status-card__body">
-							{post.text.split(/\n{2,}/).map((paragraph) => (
-								<p>{paragraph}</p>
-							))}
-						</div>
+						<div class="status-card__body" set:html={post.html}></div>
 
 						{post.images.length > 0 && (
 							<div class="status-card__media">
@@ -70,6 +66,16 @@ function formatDate(value: Date) {
 									<img src={image.fullsize || image.thumb} alt={image.alt || "Status image"} loading="lazy" />
 								))}
 							</div>
+						)}
+
+						{post.external && (
+							<a class="status-card__external" href={post.external.uri} target="_blank" rel="noreferrer">
+								<span class="status-card__domain">{post.external.domain}</span>
+								<strong class="status-card__title">{post.external.title}</strong>
+								{post.external.description && (
+									<span class="status-card__description">{post.external.description}</span>
+								)}
+							</a>
 						)}
 					</li>
 				))}
@@ -197,6 +203,12 @@ function formatDate(value: Date) {
 		margin-top: 1rem;
 	}
 
+	.status-card__body :global(a) {
+		color: inherit;
+		text-decoration-thickness: 0.08em;
+		text-underline-offset: 0.14em;
+	}
+
 	.status-card__media {
 		display: flex;
 		flex-wrap: wrap;
@@ -209,6 +221,38 @@ function formatDate(value: Date) {
 		border-radius: 1rem;
 		object-fit: cover;
 		background: var(--color-border);
+	}
+
+	.status-card__external {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		margin-top: 1rem;
+		padding: 0.9rem 1rem;
+		border: 1px solid var(--color-border);
+		border-radius: 1rem;
+		text-decoration: none;
+		color: inherit;
+		background: color-mix(in srgb, var(--color-card) 82%, var(--color-border));
+	}
+
+	.status-card__domain {
+		font-size: 0.78rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--color-muted);
+	}
+
+	.status-card__title {
+		font-size: 1rem;
+		line-height: 1.4;
+	}
+
+	.status-card__description {
+		font-size: 0.92rem;
+		line-height: 1.55;
+		color: var(--color-muted);
 	}
 
 	.status-page__empty {
