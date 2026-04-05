@@ -240,6 +240,7 @@ function buildSeed({ aboutContent, helloContent, colophonContent, ghostPosts, ta
 				label: "Primary Navigation",
 				items: [
 					{ type: "custom", label: "Home", url: "/" },
+					{ type: "custom", label: "Status", url: "/status" },
 					{ type: "custom", label: "About", url: "/pages/about" },
 					{ type: "custom", label: "Hello", url: "/pages/hello" },
 					{ type: "custom", label: "Colophon", url: "/pages/colophon" },

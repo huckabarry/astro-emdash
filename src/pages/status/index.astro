@@ -1,0 +1,237 @@
+---
+import Base from "../../layouts/Base.astro";
+import { env } from "cloudflare:workers";
+import { getStatuses } from "../../lib/status";
+
+export const prerender = false;
+
+const statuses = await getStatuses(env, { limit: 40, includeReplies: false });
+
+function formatDate(value: Date) {
+	return value.toLocaleString("en-US", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
+	});
+}
+---
+
+<Base title="Status" description="Short updates and passing notes pulled from the PDS-backed status stream.">
+	<section class="status-page">
+		<header class="status-page__hero">
+			<p class="status-page__eyebrow">PDS-backed</p>
+			<h1>Status</h1>
+			<p class="status-page__lede">
+				Short notes, links, and fragments from the same Bluesky/PDS stream that powers Afterword.
+			</p>
+		</header>
+
+		{statuses.length ? (
+			<ol class="status-page__list">
+				{statuses.map((post) => (
+					<li class="status-card">
+						<div class="status-card__meta">
+							<div class="status-card__author">
+								{post.avatar ? (
+									<img class="status-card__avatar" src={post.avatar} alt={post.displayName} />
+								) : (
+									<div class="status-card__avatar status-card__avatar--placeholder"></div>
+								)}
+								<div>
+									<div class="status-card__authorline">
+										<strong>{post.displayName}</strong>
+										<span>{post.handle}</span>
+									</div>
+									<div class="status-card__subline">
+										<time>{formatDate(post.date)}</time>
+										<span class="status-card__dot"></span>
+										<a href={post.blueskyUrl} target="_blank" rel="noreferrer">Open on Bluesky</a>
+									</div>
+								</div>
+							</div>
+							<div class="status-card__metrics">
+								<span>{post.replyCount} replies</span>
+								<span>{post.repostCount} reposts</span>
+								<span>{post.likeCount} likes</span>
+							</div>
+						</div>
+
+						<div class="status-card__body">
+							{post.text.split(/\n{2,}/).map((paragraph) => (
+								<p>{paragraph}</p>
+							))}
+						</div>
+
+						{post.images.length > 0 && (
+							<div class="status-card__media">
+								{post.images.map((image) => (
+									<img src={image.fullsize || image.thumb} alt={image.alt || "Status image"} loading="lazy" />
+								))}
+							</div>
+						)}
+					</li>
+				))}
+			</ol>
+		) : (
+			<div class="status-page__empty">
+				<h2>No status posts yet</h2>
+				<p>When the PDS-backed stream has posts, they’ll show up here.</p>
+			</div>
+		)}
+	</section>
+</Base>
+
+<style>
+	.status-page {
+		max-width: 52rem;
+		margin: 0 auto;
+		padding: 2rem 1.25rem 4rem;
+	}
+
+	.status-page__hero {
+		margin-bottom: 2rem;
+	}
+
+	.status-page__eyebrow {
+		margin: 0 0 0.35rem;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--color-accent, #7f8c8d);
+	}
+
+	.status-page__hero h1 {
+		margin: 0;
+		font-size: clamp(2rem, 4vw, 3.4rem);
+	}
+
+	.status-page__lede {
+		max-width: 40rem;
+		margin: 0.7rem 0 0;
+		font-size: 1.05rem;
+		line-height: 1.7;
+		color: var(--color-muted);
+	}
+
+	.status-page__list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: grid;
+		gap: 1.5rem;
+	}
+
+	.status-card {
+		padding: 1.25rem;
+		border: 1px solid var(--color-border);
+		border-radius: 1.25rem;
+		background: var(--color-card);
+	}
+
+	.status-card__meta {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 1rem;
+	}
+
+	.status-card__author {
+		display: flex;
+		gap: 0.85rem;
+		align-items: flex-start;
+	}
+
+	.status-card__avatar {
+		width: 2.75rem;
+		height: 2.75rem;
+		border-radius: 999px;
+		object-fit: cover;
+		background: var(--color-border);
+	}
+
+	.status-card__avatar--placeholder {
+		background: linear-gradient(135deg, var(--color-border), transparent);
+	}
+
+	.status-card__authorline,
+	.status-card__subline,
+	.status-card__metrics {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+		align-items: center;
+	}
+
+	.status-card__authorline strong {
+		font-size: 1rem;
+	}
+
+	.status-card__authorline span,
+	.status-card__subline,
+	.status-card__metrics {
+		font-size: 0.88rem;
+		color: var(--color-muted);
+	}
+
+	.status-card__subline a {
+		color: inherit;
+	}
+
+	.status-card__dot {
+		width: 3px;
+		height: 3px;
+		border-radius: 50%;
+		background: currentColor;
+	}
+
+	.status-card__body p {
+		margin: 0;
+		font-size: 1.02rem;
+		line-height: 1.75;
+	}
+
+	.status-card__body p + p {
+		margin-top: 1rem;
+	}
+
+	.status-card__media {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		margin-top: 1rem;
+	}
+
+	.status-card__media img {
+		width: min(100%, 15rem);
+		border-radius: 1rem;
+		object-fit: cover;
+		background: var(--color-border);
+	}
+
+	.status-page__empty {
+		padding: 1.5rem;
+		border: 1px solid var(--color-border);
+		border-radius: 1.25rem;
+		background: var(--color-card);
+	}
+
+	.status-page__empty h2 {
+		margin: 0 0 0.4rem;
+		font-size: 1.15rem;
+	}
+
+	.status-page__empty p {
+		margin: 0;
+		color: var(--color-muted);
+		line-height: 1.6;
+	}
+
+	@media (max-width: 720px) {
+		.status-card__meta {
+			flex-direction: column;
+		}
+	}
+</style>

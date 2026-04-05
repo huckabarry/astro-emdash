@@ -1,5 +1,6 @@
 ---
 import Base from "../../layouts/Base.astro";
+import { env } from "cloudflare:workers";
 import { getStatuses, hasStatusEditCredentials } from "../../lib/status";
 
 export const prerender = false;
@@ -9,8 +10,6 @@ if (!user) {
 	return Astro.redirect("/_emdash/admin/login?redirect=/status-admin");
 }
 
-const runtimeLocals = Astro.locals as unknown as { runtime?: { env?: Record<string, unknown> } };
-const env = runtimeLocals.runtime?.env ?? (import.meta.env as Record<string, unknown>);
 const statuses = await getStatuses(env, { limit: 30, includeReplies: true });
 const canEdit = hasStatusEditCredentials(env);
 

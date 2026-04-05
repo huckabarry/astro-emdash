@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { env } from "cloudflare:workers";
 
 import { deleteStatusRecord, getStatusRecordKey } from "../../lib/status";
 
@@ -17,8 +18,6 @@ export const POST: APIRoute = async ({ request, locals, session }) => {
 		return Response.redirect(new URL("/_emdash/admin/login?redirect=/status-admin", request.url), 303);
 	}
 
-	const runtimeLocals = locals as unknown as { runtime?: { env?: Record<string, unknown> } };
-	const env = runtimeLocals.runtime?.env ?? (import.meta.env as Record<string, unknown>);
 	const formData = await request.formData();
 	const uri = String(formData.get("uri") || "").trim();
 
