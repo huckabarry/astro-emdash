@@ -1,0 +1,190 @@
+---
+import Base from "../../layouts/Base.astro";
+import { getMediaTimeline } from "../../lib/media";
+
+export const prerender = false;
+
+Astro.response.headers.set("Cache-Control", "public, max-age=300, s-maxage=300, stale-while-revalidate=86400");
+
+const items = await getMediaTimeline(24);
+
+function formatDate(value: string) {
+	return new Date(value).toLocaleDateString("en-US", {
+		month: "long",
+		day: "numeric",
+		year: "numeric",
+	});
+}
+---
+
+<Base title="Media" description="Albums, tracks, books, movies, and shows from the broader Afterword media timeline.">
+	<section class="media-page">
+		<header class="media-page__hero">
+			<p class="media-page__eyebrow">Prepared feed</p>
+			<h1>Media</h1>
+			<p class="media-page__lede">
+				Albums, songs, books, movies, and shows folded into one timeline, rendered from the prepared
+				Afterword media feed instead of rebuilt live on every request.
+			</p>
+		</header>
+
+		{items.length ? (
+			<ol class="media-page__list">
+				{items.map((item) => (
+					<li class="media-card">
+						{item.imageUrl && <img class="media-card__image" src={item.imageUrl} alt={item.imageAlt || item.title} loading="lazy" />}
+						<div class="media-card__copy">
+							<div class="media-card__meta">
+								<span>{item.label}</span>
+								<time datetime={item.dateIso}>{formatDate(item.dateIso)}</time>
+							</div>
+							<h2><a href={item.href}>{item.title}</a></h2>
+							{item.artist && <p class="media-card__credit">{item.artist}</p>}
+							{item.credit && !item.artist && <p class="media-card__credit">{item.credit}</p>}
+							{item.summary && <p class="media-card__summary">{item.summary}</p>}
+							{item.tags.length > 0 && (
+								<div class="media-card__tags">
+									{item.tags.map((tag) => <span>{tag}</span>)}
+								</div>
+							)}
+							<div class="media-card__links">
+								<a href={item.href}>Open entry</a>
+								{item.links.slice(0, 3).map((link) => (
+									<a href={link.url} target="_blank" rel="noreferrer">{link.label}</a>
+								))}
+							</div>
+						</div>
+					</li>
+				))}
+			</ol>
+		) : (
+			<div class="media-page__empty">
+				<h2>No media entries yet</h2>
+				<p>When the prepared media timeline has items, they’ll show up here.</p>
+			</div>
+		)}
+	</section>
+</Base>
+
+<style>
+	.media-page {
+		max-width: 62rem;
+		margin: 0 auto;
+		padding: 2rem 1.25rem 4rem;
+	}
+
+	.media-page__hero {
+		margin-bottom: 2rem;
+		max-width: 46rem;
+	}
+
+	.media-page__eyebrow {
+		margin: 0 0 0.35rem;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--color-accent, #7f8c8d);
+	}
+
+	.media-page__hero h1 {
+		margin: 0;
+		font-size: clamp(2rem, 4vw, 3.4rem);
+	}
+
+	.media-page__lede {
+		margin: 0.7rem 0 0;
+		font-size: 1.05rem;
+		line-height: 1.7;
+		color: var(--color-muted);
+	}
+
+	.media-page__list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: grid;
+		gap: 1.1rem;
+	}
+
+	.media-card {
+		display: grid;
+		grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+		gap: 1rem;
+		padding: 1rem;
+		border: 1px solid var(--color-border);
+		border-radius: 1.25rem;
+		background: var(--color-card);
+	}
+
+	.media-card__image {
+		width: 100%;
+		aspect-ratio: 1;
+		object-fit: cover;
+		border-radius: 1rem;
+		background: var(--color-border);
+	}
+
+	.media-card__copy {
+		display: grid;
+		align-content: start;
+		gap: 0.55rem;
+	}
+
+	.media-card__meta,
+	.media-card__links,
+	.media-card__tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 0.8rem;
+		align-items: center;
+	}
+
+	.media-card__meta {
+		font-size: 0.84rem;
+		color: var(--color-muted);
+	}
+
+	.media-card h2 {
+		margin: 0;
+		font-size: clamp(1.2rem, 2vw, 1.6rem);
+	}
+
+	.media-card h2 a,
+	.media-card__links a {
+		color: inherit;
+		text-decoration-thickness: 0.08em;
+		text-underline-offset: 0.14em;
+	}
+
+	.media-card__credit,
+	.media-card__summary {
+		margin: 0;
+		line-height: 1.6;
+		color: var(--color-muted);
+	}
+
+	.media-card__tags span {
+		padding: 0.18rem 0.55rem;
+		border-radius: 999px;
+		border: 1px solid var(--color-border);
+		font-size: 0.8rem;
+	}
+
+	.media-page__empty {
+		padding: 1.5rem;
+		border: 1px solid var(--color-border);
+		border-radius: 1.25rem;
+		background: var(--color-card);
+	}
+
+	@media (max-width: 700px) {
+		.media-card {
+			grid-template-columns: 1fr;
+		}
+
+		.media-card__image {
+			max-width: 12rem;
+		}
+	}
+</style>

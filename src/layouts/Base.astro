@@ -37,6 +37,11 @@ const {
 	content,
 } = Astro.props;
 const siteTitle = "Afterword";
+const labLinks = [
+	{ url: "/status", label: "Status" },
+	{ url: "/check-ins", label: "Check-ins" },
+	{ url: "/media", label: "Media" },
+];
 // If title already includes site title (from getSeoMeta), use as-is
 const fullTitle = title.includes(siteTitle) ? title : `${title} — ${siteTitle}`;
 
@@ -115,6 +120,11 @@ const isLoggedIn = !!Astro.locals.user;
 								</a>
 							))
 						}
+						{
+							labLinks.map((item) => (
+								<a href={item.url}>{item.label}</a>
+							))
+						}
 					</div>
 					{
 						isLoggedIn && (
@@ -143,6 +153,8 @@ const isLoggedIn = !!Astro.locals.user;
 						<ul class="footer-links">
 							<li><a href="/">Home</a></li>
 							<li><a href="/status">Status</a></li>
+							<li><a href="/check-ins">Check-ins</a></li>
+							<li><a href="/media">Media</a></li>
 							<li><a href="/posts">All Posts</a></li>
 							{
 								pages.slice(0, 3).map((page) => (

@@ -5,6 +5,8 @@ import { getStatuses } from "../../lib/status";
 
 export const prerender = false;
 
+Astro.response.headers.set("Cache-Control", "public, max-age=300, s-maxage=300, stale-while-revalidate=86400");
+
 const statuses = await getStatuses(env, { limit: 40, includeReplies: false });
 
 function formatDate(value: Date) {
