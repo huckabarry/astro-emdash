@@ -3,12 +3,15 @@
 	"version": "0.0.1",
 	"private": true,
 	"type": "module",
+	"emdash": {
+		"seed": "seed/seed.json"
+	},
 	"scripts": {
 		"dev": "astro dev",
 		"build": "astro build",
 		"preview": "astro preview",
 		"deploy": "wrangler deploy",
-		"typecheck": "astro check" 
+		"typecheck": "astro check"
 	},
 	"dependencies": {
 		"@astrojs/cloudflare": "^13.1.6",
@@ -19,7 +22,8 @@
 		"astro": "^6.1.2",
 		"emdash": "^0.0.3",
 		"react": "^19.2.4",
-		"react-dom": "^19.2.4"
+		"react-dom": "^19.2.4",
+		"turndown": "^7.2.4"
 	},
 	"devDependencies": {
 		"@astrojs/check": "^0.9.7",

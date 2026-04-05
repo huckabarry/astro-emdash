@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "astro-emdash",
+	"name": "afterword-emdash-lab",
 	"main": "./src/worker.ts",
 	"compatibility_date": "2026-03-29",
 	"compatibility_flags": [
@@ -12,14 +12,15 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_name": "d1-database","database_id": "61f9c95d-c74d-4490-8fb8-f5737289a08a",
-			// Run `wrangler d1 create my-emdash-site` and paste the ID here
+			"database_name": "afterword-emdash-lab",
+			"database_id": "90e7e3ca-cbeb-48e1-9832-074509d7941e"
 		},
 	],
 	"r2_buckets": [
 		{
 			"binding": "MEDIA",
-			"bucket_name": "afterword","preview_bucket_name": "afterword",
+			"bucket_name": "afterword-emdash-lab",
+			"preview_bucket_name": "afterword-emdash-lab"
 		},
 	],
 	"observability": {
