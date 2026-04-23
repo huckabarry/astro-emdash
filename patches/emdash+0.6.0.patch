@@ -1,0 +1,186 @@
+diff --git a/node_modules/emdash/dist/astro/middleware.mjs b/node_modules/emdash/dist/astro/middleware.mjs
+index 466f69f..78a4acf 100644
+--- a/node_modules/emdash/dist/astro/middleware.mjs
++++ b/node_modules/emdash/dist/astro/middleware.mjs
+@@ -1485,16 +1485,22 @@ var EmDashRuntime = class EmDashRuntime {
+ 		return true;
+ 	}
+ 	runAfterSaveHooks(content, collection, isNew) {
+-		if (this.hooks.hasHooks("content:afterSave")) this.hooks.runContentAfterSave(content, collection, isNew).catch((err) => console.error("EmDash afterSave hook error:", err));
+-		for (const [pluginKey, plugin] of this.sandboxedPlugins) {
+-			const [id] = pluginKey.split(":");
+-			if (!id || !this.isPluginEnabled(id)) continue;
+-			plugin.invokeHook("content:afterSave", {
+-				content,
+-				collection,
+-				isNew
+-			}).catch((err) => console.error(`EmDash: Sandboxed plugin ${id} afterSave error:`, err));
+-		}
++		after(async () => {
++			if (this.hooks.hasHooks("content:afterSave")) await this.hooks.runContentAfterSave(content, collection, isNew);
++			for (const [pluginKey, plugin] of this.sandboxedPlugins) {
++				const [id] = pluginKey.split(":");
++				if (!id || !this.isPluginEnabled(id)) continue;
++				try {
++					await plugin.invokeHook("content:afterSave", {
++						content,
++						collection,
++						isNew
++					});
++				} catch (err) {
++					console.error(`EmDash: Sandboxed plugin ${id} afterSave error:`, err);
++				}
++			}
++		});
+ 	}
+ 	runAfterDeleteHooks(id, collection, permanent) {
+ 		if (this.hooks.hasHooks("content:afterDelete")) this.hooks.runContentAfterDelete(id, collection, permanent).catch((err) => console.error("EmDash afterDelete hook error:", err));
+@@ -1509,15 +1515,21 @@ var EmDashRuntime = class EmDashRuntime {
+ 		}
+ 	}
+ 	runAfterPublishHooks(content, collection) {
+-		if (this.hooks.hasHooks("content:afterPublish")) this.hooks.runContentAfterPublish(content, collection).catch((err) => console.error("EmDash afterPublish hook error:", err));
+-		for (const [pluginKey, plugin] of this.sandboxedPlugins) {
+-			const [pluginId] = pluginKey.split(":");
+-			if (!pluginId || !this.isPluginEnabled(pluginId)) continue;
+-			plugin.invokeHook("content:afterPublish", {
+-				content,
+-				collection
+-			}).catch((err) => console.error(`EmDash: Sandboxed plugin ${pluginId} afterPublish error:`, err));
+-		}
++		after(async () => {
++			if (this.hooks.hasHooks("content:afterPublish")) await this.hooks.runContentAfterPublish(content, collection);
++			for (const [pluginKey, plugin] of this.sandboxedPlugins) {
++				const [pluginId] = pluginKey.split(":");
++				if (!pluginId || !this.isPluginEnabled(pluginId)) continue;
++				try {
++					await plugin.invokeHook("content:afterPublish", {
++						content,
++						collection
++					});
++				} catch (err) {
++					console.error(`EmDash: Sandboxed plugin ${pluginId} afterPublish error:`, err);
++				}
++			}
++		});
+ 	}
+ 	runAfterUnpublishHooks(content, collection) {
+ 		if (this.hooks.hasHooks("content:afterUnpublish")) this.hooks.runContentAfterUnpublish(content, collection).catch((err) => console.error("EmDash afterUnpublish hook error:", err));
+@@ -1755,9 +1767,10 @@ const onRequest = defineMiddleware(async (context, next) => {
+ 		const isEmDashRoute = url.pathname.startsWith("/_emdash");
+ 		const isPublicRuntimeRoute = PUBLIC_RUNTIME_ROUTES.has(url.pathname) || SITEMAP_COLLECTION_RE.test(url.pathname);
+ 		const hasEditCookie = cookies.get("emdash-edit-mode")?.value === "true";
++		const hasSessionCookie = cookies.get("astro-session") !== void 0;
+ 		const hasPreviewToken = url.searchParams.has("_preview");
+ 		const playgroundDb = locals.__playgroundDb;
+-		const sessionUser = context.isPrerendered ? null : await context.session?.get("user");
++		const sessionUser = context.isPrerendered || !hasSessionCookie ? null : await context.session?.get("user");
+ 		if (!isEmDashRoute && !isPublicRuntimeRoute && !hasEditCookie && !hasPreviewToken) {
+ 			if (!sessionUser && !playgroundDb) {
+ 				const timings = [];
+diff --git a/node_modules/emdash/src/astro/middleware.ts b/node_modules/emdash/src/astro/middleware.ts
+index 315e9c4..8ad5697 100644
+--- a/node_modules/emdash/src/astro/middleware.ts
++++ b/node_modules/emdash/src/astro/middleware.ts
+@@ -246,6 +246,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
+ 		// Check for edit mode cookie - editors viewing public pages need the runtime
+ 		// so auth middleware can verify their session for visual editing
+ 		const hasEditCookie = cookies.get("emdash-edit-mode")?.value === "true";
++		const hasSessionCookie = cookies.get("astro-session") !== undefined;
+ 		const hasPreviewToken = url.searchParams.has("_preview");
+ 
+ 		// Playground mode: the playground middleware stashes the per-session DO database
+@@ -257,7 +258,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
+ 		// and the full doInit path need this, and the session store is network-backed
+ 		// (KV / Durable Object) so we want to avoid re-fetching on the hot path.
+ 		// Skipped entirely for prerendered requests — they have no session.
+-		const sessionUser = context.isPrerendered ? null : await context.session?.get("user");
++		const sessionUser =
++			context.isPrerendered || !hasSessionCookie ? null : await context.session?.get("user");
+ 
+ 		if (!isEmDashRoute && !isPublicRuntimeRoute && !hasEditCookie && !hasPreviewToken) {
+ 			if (!sessionUser && !playgroundDb) {
+diff --git a/node_modules/emdash/src/emdash-runtime.ts b/node_modules/emdash/src/emdash-runtime.ts
+index dd9192a..dc1a62d 100644
+--- a/node_modules/emdash/src/emdash-runtime.ts
++++ b/node_modules/emdash/src/emdash-runtime.ts
+@@ -2220,22 +2220,24 @@ export class EmDashRuntime {
+ 		collection: string,
+ 		isNew: boolean,
+ 	): void {
+-		// Trusted plugins
+-		if (this.hooks.hasHooks("content:afterSave")) {
+-			this.hooks
+-				.runContentAfterSave(content, collection, isNew)
+-				.catch((err) => console.error("EmDash afterSave hook error:", err));
+-		}
++		after(async () => {
++			// Trusted plugins
++			if (this.hooks.hasHooks("content:afterSave")) {
++				await this.hooks.runContentAfterSave(content, collection, isNew);
++			}
+ 
+-		// Sandboxed plugins
+-		for (const [pluginKey, plugin] of this.sandboxedPlugins) {
+-			const [id] = pluginKey.split(":");
+-			if (!id || !this.isPluginEnabled(id)) continue;
++			// Sandboxed plugins
++			for (const [pluginKey, plugin] of this.sandboxedPlugins) {
++				const [id] = pluginKey.split(":");
++				if (!id || !this.isPluginEnabled(id)) continue;
+ 
+-			plugin
+-				.invokeHook("content:afterSave", { content, collection, isNew })
+-				.catch((err) => console.error(`EmDash: Sandboxed plugin ${id} afterSave error:`, err));
+-		}
++				try {
++					await plugin.invokeHook("content:afterSave", { content, collection, isNew });
++				} catch (err) {
++					console.error(`EmDash: Sandboxed plugin ${id} afterSave error:`, err);
++				}
++			}
++		});
+ 	}
+ 
+ 	private runAfterDeleteHooks(id: string, collection: string, permanent: boolean): void {
+@@ -2260,24 +2262,24 @@ export class EmDashRuntime {
+ 	}
+ 
+ 	private runAfterPublishHooks(content: Record<string, unknown>, collection: string): void {
+-		// Trusted plugins
+-		if (this.hooks.hasHooks("content:afterPublish")) {
+-			this.hooks
+-				.runContentAfterPublish(content, collection)
+-				.catch((err) => console.error("EmDash afterPublish hook error:", err));
+-		}
++		after(async () => {
++			// Trusted plugins
++			if (this.hooks.hasHooks("content:afterPublish")) {
++				await this.hooks.runContentAfterPublish(content, collection);
++			}
+ 
+-		// Sandboxed plugins
+-		for (const [pluginKey, plugin] of this.sandboxedPlugins) {
+-			const [pluginId] = pluginKey.split(":");
+-			if (!pluginId || !this.isPluginEnabled(pluginId)) continue;
++			// Sandboxed plugins
++			for (const [pluginKey, plugin] of this.sandboxedPlugins) {
++				const [pluginId] = pluginKey.split(":");
++				if (!pluginId || !this.isPluginEnabled(pluginId)) continue;
+ 
+-			plugin
+-				.invokeHook("content:afterPublish", { content, collection })
+-				.catch((err) =>
+-					console.error(`EmDash: Sandboxed plugin ${pluginId} afterPublish error:`, err),
+-				);
+-		}
++				try {
++					await plugin.invokeHook("content:afterPublish", { content, collection });
++				} catch (err) {
++					console.error(`EmDash: Sandboxed plugin ${pluginId} afterPublish error:`, err);
++				}
++			}
++		});
+ 	}
+ 
+ 	private runAfterUnpublishHooks(content: Record<string, unknown>, collection: string): void {
