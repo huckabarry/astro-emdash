@@ -1,0 +1,37 @@
+---
+import { getEmDashCollection } from "emdash";
+import { formatDisplayDate } from "../../lib/afterword";
+
+interface Props {
+	count?: number;
+	showDate?: boolean;
+}
+
+const {
+	count = 5,
+	showDate = true,
+} = Astro.props;
+
+const postsResult = await getEmDashCollection("posts", {
+	status: "published",
+	orderBy: { published_at: "desc" },
+	limit: Math.max(1, Number(count) || 5),
+});
+
+const posts = postsResult.entries;
+---
+
+{posts.length ? (
+	<ul class="widget-list">
+		{posts.map((post) => (
+			<li class="widget-list__item">
+				<a class="widget-list__link" href={`/posts/${post.id}`}>{post.data.title}</a>
+				{showDate ? (
+					<time class="widget-list__meta" datetime={post.data.publishedAt?.toISOString()}>
+						{formatDisplayDate(post.data.publishedAt ?? undefined)}
+					</time>
+				) : null}
+			</li>
+		))}
+	</ul>
+) : null}

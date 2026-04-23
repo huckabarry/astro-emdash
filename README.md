@@ -1,67 +1,27 @@
-# EmDash Blog Template (Cloudflare)
+# astro-emdash
 
-A clean, minimal blog built with [EmDash](https://github.com/emdash-cms/emdash) and deployed on Cloudflare Workers with D1 and R2.
+This repo powers the public `afterword.blog` site and its EmDash CMS. It is the main frontend and editing surface for the site.
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/emdash-cms/templates/tree/main/blog-cloudflare)
+## Current role
 
-![Blog template homepage](https://raw.githubusercontent.com/emdash-cms/emdash/main/assets/templates/blog/latest/homepage-light-desktop.jpg)
+- Serves the public site at `afterword.blog`
+- Hosts the EmDash admin and content editing interface
+- Stores local site content in D1 and media in R2
+- Reads from a mix of sources including the PDS, EmDash content, and a few external feeds
 
-## What's Included
+## Architecture
 
-- Featured post hero on the homepage
-- Post archive with reading time estimates
-- Category and tag archives
-- Full-text search
-- RSS feed
-- SEO metadata and JSON-LD
-- Dark/light mode
-- Forms plugin and webhook notifier
+- Public site and CMS: this repo
+- Background sync worker: the SvelteKit repo on `sync.afterword.blog`
 
-## Pages
+The SvelteKit worker still handles a few backend-style sync jobs, especially:
 
-| Page | Route |
-|---|---|
-| Homepage | `/` |
-| All posts | `/posts` |
-| Single post | `/posts/:slug` |
-| Category archive | `/category/:slug` |
-| Tag archive | `/tag/:slug` |
-| Search | `/search` |
-| Static pages | `/pages/:slug` |
-| 404 | fallback |
+- Swarm/Foursquare push -> PDS check-ins
+- music import -> PDS and related snapshots
 
-## Screenshots
+If we ever need to review that side of the architecture, start with [`docs/architecture-notes.md`](./docs/architecture-notes.md).
 
-| | Desktop | Mobile |
-|---|---|---|
-| Light | ![homepage light desktop](https://raw.githubusercontent.com/emdash-cms/emdash/main/assets/templates/blog/latest/homepage-light-desktop.jpg) | ![homepage light mobile](https://raw.githubusercontent.com/emdash-cms/emdash/main/assets/templates/blog/latest/homepage-light-mobile.jpg) |
-| Dark | ![homepage dark desktop](https://raw.githubusercontent.com/emdash-cms/emdash/main/assets/templates/blog/latest/homepage-dark-desktop.jpg) | ![homepage dark mobile](https://raw.githubusercontent.com/emdash-cms/emdash/main/assets/templates/blog/latest/homepage-dark-mobile.jpg) |
+## Notes
 
-## Infrastructure
-
-- **Runtime:** Cloudflare Workers
-- **Database:** D1
-- **Storage:** R2
-- **Framework:** Astro with `@astrojs/cloudflare`
-
-## Local Development
-
-```bash
-pnpm install
-pnpm bootstrap
-pnpm dev
-```
-
-## Deploying
-
-```bash
-pnpm deploy
-```
-
-Or click the deploy button above to set up the project in your Cloudflare account.
-
-## See Also
-
-- [Node.js variant](../blog) -- same template using SQLite and local file storage
-- [All templates](../)
-- [EmDash documentation](https://github.com/emdash-cms/emdash/tree/main/docs)
+- This repo started from an EmDash Cloudflare template, but it is now a customized site
+- Some older public routes and sync logic were intentionally removed once `afterword.blog` moved here from the older SvelteKit site

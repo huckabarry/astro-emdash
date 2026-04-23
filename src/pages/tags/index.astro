@@ -1,0 +1,29 @@
+---
+import { getTaxonomyTerms } from "emdash";
+import Base from "../../layouts/Base.astro";
+
+const hiddenTags = new Set(["earlier-web", "instagram"]);
+const tags = (await getTaxonomyTerms("tag"))
+	.filter((tag) => (tag.count || 0) > 0)
+	.filter((tag) => !hiddenTags.has(tag.slug))
+	.sort((left, right) => left.label.localeCompare(right.label));
+---
+
+<Base title="Tags | Bryan Robb" description="Browse blog posts by topic.">
+	<section class="stream-head">
+		<h1 class="stream-head__title">Tags</h1>
+		<p class="stream-head__lede">Browse blog posts by topic.</p>
+	</section>
+
+	<section class="tag-archive" aria-label="Tag archive">
+		{tags.length ? (
+			tags.map((tag) => (
+				<a class="tag-pill tag-archive__tag" href={`/tags/${tag.slug}`}>
+					{tag.label}
+				</a>
+			))
+		) : (
+			<p class="empty-state">No tags are available yet.</p>
+		)}
+	</section>
+</Base>

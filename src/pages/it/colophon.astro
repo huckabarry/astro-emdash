@@ -1,0 +1,30 @@
+---
+import { getEmDashEntry } from "emdash";
+import { PortableText } from "emdash/ui";
+import Base from "../../layouts/Base.astro";
+
+const { entry: page, cacheHint } = await getEmDashEntry("pages", "colophon", {
+	locale: "it",
+});
+
+if (!page) {
+	return Astro.redirect("/404");
+}
+
+Astro.cache.set(cacheHint);
+---
+
+<Base
+	title="Colophon"
+	description="Note su come e costruito il sito e sugli strumenti che lo rendono possibile."
+	content={{ collection: "pages", id: page.data.id, slug: "colophon" }}
+>
+	<section class="section-block">
+		<h1 class="section-title">Colophon</h1>
+		<article class="entry content-page">
+			<div class="entry__content content-body">
+				<PortableText value={page.data.content} />
+			</div>
+		</article>
+	</section>
+</Base>

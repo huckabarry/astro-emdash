@@ -1,0 +1,267 @@
+---
+import "@emdash-cms/plugin-forms/styles";
+import { getEmDashEntry } from "emdash";
+import { PortableText } from "emdash/ui";
+import Base from "../layouts/Base.astro";
+import { PUBLIC_ARCHIVE_CACHE_CONTROL } from "../lib/emdash-content";
+
+Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
+
+const { entry: page, cacheHint } = await getEmDashEntry("pages", "hello");
+
+if (!page) {
+	return Astro.redirect("/404");
+}
+
+Astro.cache.set(cacheHint);
+
+const title = page.data.title || "Hello";
+const description =
+	"A short guide to what this site is, what Bryan writes about, and the best ways to say hello.";
+---
+
+<Base title={title} description={description}>
+	<section class="section-block hello-page">
+		<h1 class="section-title" {...page.edit.title}>{title}</h1>
+		<article class="content content-page">
+			<div class="post-full-content">
+				<section class="content-body hello-page__body" {...page.edit.content}>
+					<PortableText value={page.data.content} />
+				</section>
+				<section class="hello-page__form-section" aria-label="Contact form">
+					<h2>Send a message</h2>
+					<form
+						class="ec-form"
+						method="POST"
+						action="/_emdash/api/plugins/emdash-forms/submit"
+						data-form-id="contact-form"
+						data-contact-form
+					>
+						<div class="ec-form-page">
+							<div class="ec-form-field ec-form-field--text ec-form-field--half">
+								<label class="ec-form-label" for="contact-form-name">Name:</label>
+								<input class="ec-form-input" id="contact-form-name" name="name" type="text" />
+							</div>
+							<div class="ec-form-field ec-form-field--email ec-form-field--half">
+								<label class="ec-form-label" for="contact-form-email">Email:</label>
+								<input class="ec-form-input" id="contact-form-email" name="email" type="email" />
+							</div>
+							<div class="ec-form-field ec-form-field--textarea">
+								<label class="ec-form-label" for="contact-form-message">Message:</label>
+								<textarea
+									class="ec-form-input"
+									id="contact-form-message"
+									name="message"
+									rows="6"
+								></textarea>
+							</div>
+						</div>
+
+						<div class="ec-form-field hello-page__honeypot" aria-hidden="true">
+							<label for="contact-form-hp">Leave blank</label>
+							<input
+								type="text"
+								id="contact-form-hp"
+								name="_hp"
+								tabindex="-1"
+								autocomplete="off"
+							/>
+						</div>
+
+						<input type="hidden" name="formId" value="contact-form" />
+
+						<div class="ec-form-nav">
+							<button type="submit" class="ec-form-submit">Submit</button>
+						</div>
+
+						<div class="ec-form-status" data-form-status aria-live="polite"></div>
+					</form>
+				</section>
+			</div>
+		</article>
+	</section>
+</Base>
+
+<script>
+	const initContactForm = () => {
+		const form = document.querySelector('[data-contact-form]');
+		if (!(form instanceof HTMLFormElement) || form.dataset.bound === "1") return;
+
+		form.dataset.bound = "1";
+
+		const status = form.querySelector("[data-form-status]");
+		const submitButton = form.querySelector(".ec-form-submit");
+		const defaultSubmitLabel = submitButton?.textContent ?? "Submit";
+
+		const showStatus = (message, tone) => {
+			if (!(status instanceof HTMLElement)) return;
+			status.textContent = message;
+			status.classList.remove("ec-form-status--success", "ec-form-status--error");
+			status.classList.add(
+				tone === "success" ? "ec-form-status--success" : "ec-form-status--error",
+			);
+		};
+
+		const clearStatus = () => {
+			if (!(status instanceof HTMLElement)) return;
+			status.textContent = "";
+			status.classList.remove("ec-form-status--success", "ec-form-status--error");
+		};
+
+		form.addEventListener("submit", async (event) => {
+			event.preventDefault();
+			clearStatus();
+
+			if (submitButton instanceof HTMLButtonElement) {
+				submitButton.disabled = true;
+				submitButton.textContent = "Submitting...";
+			}
+
+			try {
+				const formData = new FormData(form);
+				let formId = "";
+				const data = {};
+
+				for (const [key, value] of formData.entries()) {
+					if (typeof value !== "string") continue;
+					if (key === "formId") {
+						formId = value;
+						continue;
+					}
+					data[key] = value;
+				}
+
+				const response = await fetch(form.action, {
+					method: "POST",
+					headers: {
+						"Accept": "application/json",
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ formId, data }),
+				});
+
+				const payload = await response.json().catch(() => null);
+				const result = payload?.data ?? payload;
+
+				if (response.ok && result?.success) {
+					form.reset();
+					showStatus(result.message || "Thank you for your submission.", "success");
+					return;
+				}
+
+				const errorMessage =
+					result?.error?.message ||
+					result?.message ||
+					"Something went wrong. Please try again.";
+				showStatus(errorMessage, "error");
+			} catch {
+				showStatus("Network error. Please try again.", "error");
+			} finally {
+				if (submitButton instanceof HTMLButtonElement) {
+					submitButton.disabled = false;
+					submitButton.textContent = defaultSubmitLabel;
+				}
+			}
+		});
+	};
+
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", initContactForm, { once: true });
+	} else {
+		initContactForm();
+	}
+
+	document.addEventListener("astro:page-load", initContactForm);
+</script>
+
+<style>
+	.hello-page .section-title {
+		margin-bottom: 1.25rem;
+	}
+
+	.hello-page__form-section {
+		margin-top: 2rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid var(--border);
+	}
+
+	.hello-page__form-section h2 {
+		margin: 0 0 1rem;
+	}
+
+	.hello-page__form-section :global(.ec-form) {
+		--ec-form-field-bg: #fff;
+		--ec-form-field-border: 1px solid rgba(17, 24, 39, 0.16);
+		/* Match the site's "surface" panels (home page boxes). */
+		--ec-form-submit-bg: var(--surface);
+		--ec-form-submit-color: var(--text);
+		color: var(--text);
+	}
+
+	.hello-page__form-section :global(.ec-form-nav) {
+		display: flex;
+		justify-content: flex-end;
+	}
+
+	.hello-page__form-section :global(.ec-form-submit) {
+		border: 1px solid var(--border);
+	}
+
+	.hello-page__form-section :global(.ec-form-label),
+	.hello-page__form-section :global(.ec-form-help),
+	.hello-page__form-section :global(.ec-form-prev) {
+		color: var(--text);
+	}
+
+	.hello-page__form-section :global(.ec-form-input),
+	.hello-page__form-section :global(.ec-form select),
+	.hello-page__form-section :global(.ec-form textarea) {
+		color: #111827;
+		caret-color: #111827;
+	}
+
+	.hello-page__form-section :global(.ec-form-input::placeholder),
+	.hello-page__form-section :global(.ec-form textarea::placeholder) {
+		color: rgba(17, 24, 39, 0.55);
+	}
+
+	.hello-page__honeypot {
+		position: absolute;
+		left: -9999px;
+	}
+
+	.hello-page__body :global(p),
+	.hello-page__body :global(ul),
+	.hello-page__body :global(ol),
+	.hello-page__body :global(h2) {
+		margin-top: 0;
+	}
+
+	.hello-page__body :global(p + p) {
+		margin-top: 1.15rem;
+	}
+
+	.hello-page__body :global(h2) {
+		margin-top: 2.25rem;
+	}
+
+	.hello-page__body :global(h2 + ul),
+	.hello-page__body :global(h2 + ol) {
+		margin-top: 0.85rem;
+	}
+
+	.hello-page__body :global(ul),
+	.hello-page__body :global(ol) {
+		padding-left: 1.2rem;
+		line-height: 1.65;
+	}
+
+	.hello-page__body :global(li + li) {
+		margin-top: 0.7rem;
+	}
+
+	.hello-page__body :global(ul + h2),
+	.hello-page__body :global(ol + h2) {
+		margin-top: 2.25rem;
+	}
+</style>

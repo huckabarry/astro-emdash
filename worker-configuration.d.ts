@@ -4,6 +4,7 @@
 declare namespace Cloudflare {
 	interface Env {
 		MEDIA: R2Bucket;
+		LEGACY_MEDIA: R2Bucket;
 		DB: D1Database;
 	}
 }

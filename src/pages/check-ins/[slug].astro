@@ -1,6 +1,7 @@
 ---
 import { env } from "cloudflare:workers";
 import Base from "../../layouts/Base.astro";
+import CheckinMap from "../../components/CheckinMap.astro";
 import { getCheckinBySlug, getCheckins } from "../../lib/checkins";
 
 export const prerender = false;
@@ -32,43 +33,51 @@ function formatDate(value: Date) {
 	title={`${item.name} | Check-ins`}
 	description={[item.note || item.excerpt, item.place].filter(Boolean).join(" · ") || `Check-in at ${item.name}`}
 >
-	<article class="checkin-entry">
-		<div class="checkin-entry__meta">
+	<article class="entry entry--checkin">
+		<div class="entry__meta">
 			<a href="/check-ins">Check-ins</a>
 			<time datetime={item.visitedAt.toISOString()}>{formatDate(item.visitedAt)}</time>
 			{item.place && <span>{item.place}</span>}
 		</div>
 
-		<h1>{item.name}</h1>
+		<h1 class="entry__title">{item.name}</h1>
 
-		{item.mapEmbedUrl && (
-			<div class="checkin-entry__map">
-				<iframe
-					src={item.mapEmbedUrl}
-					title={`Map for ${item.name}`}
-					loading="lazy"
-					referrerpolicy="no-referrer-when-downgrade"
-				></iframe>
-			</div>
+		{item.latitude !== null && item.longitude !== null && (
+			<section class="checkin-map" aria-label="Map">
+				<CheckinMap latitude={item.latitude} longitude={item.longitude} name={item.name} />
+				<div class="checkin-map__actions">
+					{item.appleMapsUrl && <a class="post-action-link" href={item.appleMapsUrl} target="_blank" rel="noreferrer">Open in Apple Maps</a>}
+					{item.latitude !== null && item.longitude !== null && (
+						<a
+							class="post-action-link"
+							href={`https://www.openstreetmap.org/?mlat=${item.latitude}&mlon=${item.longitude}#map=14/${item.latitude}/${item.longitude}`}
+							target="_blank"
+							rel="noreferrer"
+						>
+							Open in OpenStreetMap
+						</a>
+					)}
+				</div>
+			</section>
 		)}
 
 		{item.coverImage && (
-			<figure class="checkin-entry__figure">
+			<figure class="entry__figure">
 				<img src={item.coverImage} alt={item.name} loading="eager" />
 			</figure>
 		)}
 
 		{item.photoUrls.length > 1 && (
-			<section class="checkin-entry__gallery" aria-label="More photos">
+			<section class="checkin-gallery" aria-label="More photos">
 				{item.photoUrls
 					.filter((photo) => photo !== item.coverImage)
-					.map((photo) => <img src={photo} alt={item.name} loading="lazy" />)}
+					.map((photo) => <img class="checkin-gallery__image" src={photo} alt={item.name} loading="lazy" />)}
 			</section>
 		)}
 
-		{item.note && <div class="checkin-entry__body"><p>{item.note}</p></div>}
+		{item.note && <div class="entry__content"><p>{item.note}</p></div>}
 
-		<dl class="checkin-entry__details">
+		<dl class="checkin-detail__meta">
 			{item.address && (
 				<div>
 					<dt>Address</dt>
@@ -89,133 +98,45 @@ function formatDate(value: Date) {
 			)}
 		</dl>
 
-		<div class="checkin-entry__actions">
-			{item.website && <a href={item.website} target="_blank" rel="noreferrer">Visit place website</a>}
-			{item.appleMapsUrl && <a href={item.appleMapsUrl} target="_blank" rel="noreferrer">Open in Apple Maps</a>}
-			{item.latitude !== null && item.longitude !== null && (
-				<a
-					href={`https://www.openstreetmap.org/?mlat=${item.latitude}&mlon=${item.longitude}#map=14/${item.latitude}/${item.longitude}`}
-					target="_blank"
-					rel="noreferrer"
-				>
-					Open in OpenStreetMap
-				</a>
-			)}
-		</div>
+		{item.tags.length ? (
+			<div class="checkin-card__tags">
+				{item.tags.map((tag) => <span class="tag-pill">{tag}</span>)}
+			</div>
+		) : null}
 
-		{(previousItem || nextItem) && (
-			<nav class="checkin-entry__pager">
-				{previousItem ? <a href={`/check-ins/${previousItem.slug}`}>← {previousItem.name}</a> : <span></span>}
-				{nextItem ? <a href={`/check-ins/${nextItem.slug}`}>{nextItem.name} →</a> : <span></span>}
+		<footer class="post-actions">
+			{item.website && <a class="post-action-link" href={item.website} target="_blank" rel="noreferrer">Visit place website</a>}
+			<a class="post-action-link" href="/check-ins">Back to all check-ins</a>
+		</footer>
+
+		{previousItem || nextItem ? (
+			<nav class="post-navigation">
+				<ul>
+					<li class="post-navigation-item post-navigation-item-previous">
+						{previousItem ? (
+							<a class="post-navigation-link" href={`/check-ins/${previousItem.slug}`}>
+								<span class="post-navigation-label">← Previous</span>
+								<span class="post-navigation-title">{previousItem.name}</span>
+							</a>
+						) : null}
+					</li>
+					<li class="post-navigation-item post-navigation-item-next">
+						{nextItem ? (
+							<a class="post-navigation-link" href={`/check-ins/${nextItem.slug}`}>
+								<span class="post-navigation-label">Next →</span>
+								<span class="post-navigation-title">{nextItem.name}</span>
+							</a>
+						) : null}
+					</li>
+				</ul>
 			</nav>
-		)}
+		) : null}
 	</article>
 </Base>
 
 <style>
-	.checkin-entry {
-		max-width: 46rem;
-		margin: 0 auto;
-		padding: 2rem 1.25rem 4rem;
-	}
-
-	.checkin-entry__meta,
-	.checkin-entry__actions,
-	.checkin-entry__pager {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.55rem 0.8rem;
-		align-items: center;
-	}
-
-	.checkin-entry__meta {
-		margin-bottom: 0.9rem;
-		font-size: 0.84rem;
-		color: var(--color-muted);
-	}
-
-	.checkin-entry h1 {
-		margin: 0 0 1.5rem;
-		font-size: clamp(2.1rem, 4.8vw, 4rem);
-		line-height: 1.05;
-	}
-
-	.checkin-entry__map {
-		margin: 0 0 1.5rem;
-		overflow: hidden;
-		border: 1px solid var(--color-border);
-		border-radius: 1.25rem;
-		background: var(--color-card);
-		aspect-ratio: 16 / 9;
-	}
-
-	.checkin-entry__map iframe {
-		width: 100%;
-		height: 100%;
-		border: 0;
-	}
-
-	.checkin-entry__figure,
-	.checkin-entry__gallery {
-		margin: 0 0 1.5rem;
-	}
-
-	.checkin-entry__figure img,
-	.checkin-entry__gallery img {
-		width: 100%;
-		border-radius: 1.25rem;
-		background: var(--color-card);
-	}
-
-	.checkin-entry__gallery {
+	.entry--checkin {
 		display: grid;
 		gap: 1rem;
-	}
-
-	.checkin-entry__body p {
-		margin: 0 0 1.5rem;
-		font-size: 1.05rem;
-		line-height: 1.8;
-	}
-
-	.checkin-entry__details {
-		display: grid;
-		gap: 1rem;
-		margin: 0 0 1.5rem;
-		padding: 1rem 1.1rem;
-		border: 1px solid var(--color-border);
-		border-radius: 1rem;
-		background: var(--color-card);
-	}
-
-	.checkin-entry__details dt {
-		font-size: 0.75rem;
-		font-weight: 700;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--color-muted);
-	}
-
-	.checkin-entry__details dd {
-		margin: 0.25rem 0 0;
-		line-height: 1.6;
-	}
-
-	.checkin-entry__actions {
-		margin-bottom: 2rem;
-	}
-
-	.checkin-entry__actions a,
-	.checkin-entry__meta a,
-	.checkin-entry__pager a {
-		color: inherit;
-		text-decoration-thickness: 0.08em;
-		text-underline-offset: 0.14em;
-	}
-
-	.checkin-entry__pager {
-		justify-content: space-between;
-		padding-top: 1rem;
-		border-top: 1px solid var(--color-border);
 	}
 </style>

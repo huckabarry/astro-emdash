@@ -1,0 +1,141 @@
+---
+import { getWidgetArea } from "emdash";
+import { env } from "cloudflare:workers";
+import WidgetRenderer from "./WidgetRenderer.astro";
+import { getLatestCheckin } from "../lib/checkins";
+import { getLatestTrack } from "../lib/media";
+import { getStatusFeedPage } from "../lib/status-feed";
+
+const { widgetArea } = Astro.props as { widgetArea?: Awaited<ReturnType<typeof getWidgetArea>> | null };
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+
+	try {
+		return await Promise.race([
+			promise,
+			new Promise<T>((resolve) => {
+				timer = setTimeout(() => resolve(fallback), timeoutMs);
+			}),
+		]);
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
+const primaryStatusHandle = String(
+	process.env.STANDARD_SITE_IDENTIFIER ||
+		process.env.ATPROTO_REPO ||
+		process.env.ATPROTO_IDENTIFIER ||
+		"afterword.blog",
+)
+	.trim()
+	.replace(/^@/, "");
+
+const [sidebarWidgetAreaResult, statusPageResult, latestCheckinResult, latestTrackResult] = await Promise.allSettled([
+	widgetArea ? Promise.resolve(widgetArea) : getWidgetArea("sidebar"),
+	getStatusFeedPage({ limit: 5 }),
+	withTimeout(getLatestCheckin(env), 1200, null),
+	withTimeout(getLatestTrack(), 1200, null),
+]);
+
+const sidebarWidgetArea = sidebarWidgetAreaResult.status === "fulfilled" ? sidebarWidgetAreaResult.value : null;
+const statusPage = statusPageResult.status === "fulfilled"
+	? statusPageResult.value
+	: { statuses: [], cursor: null, limit: 5 };
+const latestCheckin = latestCheckinResult.status === "fulfilled" ? latestCheckinResult.value : null;
+const latestTrack = latestTrackResult.status === "fulfilled" ? latestTrackResult.value : null;
+const latestStatus = statusPage.statuses.find((status) =>
+	String(status.handle || "").replace(/^@/, "") === primaryStatusHandle
+) || statusPage.statuses[0] || null;
+
+function formatDate(value: Date | string | null | undefined) {
+	if (!value) return "";
+
+	const date = value instanceof Date ? value : new Date(value);
+	if (Number.isNaN(date.getTime())) return "";
+
+	return date.toLocaleDateString("en-US", {
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+	});
+}
+
+function excerpt(value: string, maxLength = 160) {
+	const normalized = String(value || "").trim().replace(/\s+/g, " ");
+	if (!normalized || normalized.length <= maxLength) return normalized;
+	return `${normalized.slice(0, maxLength).replace(/\s+\S*$/, "").trim()}…`;
+}
+---
+
+<div class="sidebar-stack">
+	{latestStatus ? (
+		<section class="sidebar-panel">
+			<div class="sidebar-panel__head">
+				<h2 class="sidebar-panel__title">Latest Status</h2>
+				<a class="sidebar-panel__more" href="/status">All</a>
+			</div>
+			<div class="sidebar-signal">
+				<time class="sidebar-signal__meta" datetime={latestStatus.date?.toISOString()}>
+					{formatDate(latestStatus.date)}
+				</time>
+				<a class="sidebar-signal__title" href={`/status/${latestStatus.slug}`}>View update</a>
+				<div class="sidebar-signal__body" set:html={latestStatus.html}></div>
+			</div>
+		</section>
+	) : null}
+
+	{latestCheckin ? (
+		<section class="sidebar-panel">
+			<div class="sidebar-panel__head">
+				<h2 class="sidebar-panel__title">Recent Check-In</h2>
+				<a class="sidebar-panel__more" href="/check-ins">All</a>
+			</div>
+			<div class="sidebar-signal">
+				<time class="sidebar-signal__meta" datetime={latestCheckin.visitedAt.toISOString()}>
+					{formatDate(latestCheckin.visitedAt)}
+				</time>
+				<a class="sidebar-signal__title" href={latestCheckin.canonicalPath || "/check-ins"}>
+					{latestCheckin.name}
+				</a>
+				{latestCheckin.venueCategory ? (
+					<p class="sidebar-signal__subhead">{latestCheckin.venueCategory}</p>
+				) : null}
+				{latestCheckin.excerpt || latestCheckin.note ? (
+					<p class="sidebar-signal__text">{excerpt(latestCheckin.excerpt || latestCheckin.note)}</p>
+				) : null}
+			</div>
+		</section>
+	) : null}
+
+	{latestTrack ? (
+		<section class="sidebar-panel">
+			<div class="sidebar-panel__head">
+				<h2 class="sidebar-panel__title">Latest Track</h2>
+				<a class="sidebar-panel__more" href="/listening">All</a>
+			</div>
+			<div class="sidebar-signal">
+				<time class="sidebar-signal__meta" datetime={latestTrack.dateIso}>
+					{latestTrack.dateLabel}
+				</time>
+				<a class="sidebar-signal__title" href={latestTrack.href}>{latestTrack.title}</a>
+				{latestTrack.artist ? <p class="sidebar-signal__subhead">{latestTrack.artist}</p> : null}
+				{latestTrack.summary ? <p class="sidebar-signal__text">{excerpt(latestTrack.summary)}</p> : null}
+			</div>
+		</section>
+	) : null}
+
+	{sidebarWidgetArea?.widgets.length ? (
+		<section class="sidebar-panel">
+			<div class="sidebar-panel__head">
+				<h2 class="sidebar-panel__title">{sidebarWidgetArea.label}</h2>
+			</div>
+			<div class="sidebar-widget-area">
+				{sidebarWidgetArea.widgets.map((widget) => (
+					<WidgetRenderer widget={widget} />
+				))}
+			</div>
+		</section>
+	) : null}
+</div>

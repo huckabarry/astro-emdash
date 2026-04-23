@@ -1,0 +1,560 @@
+---
+import { getEmDashCollection } from "emdash";
+import Base from "../layouts/Base.astro";
+import { getImageAlt, getImageUrl, getPortableTextImages } from "../lib/afterword";
+import { PUBLIC_ARCHIVE_CACHE_CONTROL } from "../lib/emdash-content";
+
+Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
+
+const GALLERY_POST_QUERY_LIMIT = 80;
+const GALLERY_INITIAL_PHOTO_LIMIT = 120;
+
+const [galleryResult, photographyResult, fieldNotesResult] = await Promise.all([
+	getEmDashCollection("posts", {
+		status: "published",
+		where: { tag: "gallery" },
+		orderBy: { published_at: "desc" },
+		limit: GALLERY_POST_QUERY_LIMIT,
+	}),
+	getEmDashCollection("posts", {
+		status: "published",
+		where: { tag: "photography" },
+		orderBy: { published_at: "desc" },
+		limit: GALLERY_POST_QUERY_LIMIT,
+	}),
+	getEmDashCollection("posts", {
+		status: "published",
+		where: { tag: "field-notes" },
+		orderBy: { published_at: "desc" },
+		limit: GALLERY_POST_QUERY_LIMIT,
+	}),
+]);
+
+Astro.cache.set(galleryResult.cacheHint);
+Astro.cache.set(photographyResult.cacheHint);
+Astro.cache.set(fieldNotesResult.cacheHint);
+
+type GalleryPost = {
+	id: string;
+	slug?: string | null;
+	data: {
+		title?: string | null;
+		publishedAt?: Date | string | null;
+		featured_image?: unknown;
+		content?: unknown;
+	};
+};
+
+function sanitizeSegment(value: string) {
+	return String(value || "")
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9._-]+/g, "-")
+		.replace(/^-+|-+$/g, "") || "item";
+}
+
+function getImageSourceUrl(image: unknown): string | null {
+	return getImageUrl(image, Astro.url.origin);
+}
+
+function getImageFilename(image: unknown, fallbackSlug: string) {
+	if (!image || typeof image !== "object") {
+		return `${sanitizeSegment(fallbackSlug)}.jpg`;
+	}
+
+	const value = image as Record<string, unknown>;
+	const filename =
+		typeof value.filename === "string" && value.filename.trim()
+			? value.filename.trim()
+			: null;
+
+	if (filename) return filename;
+
+	try {
+		const sourceUrl = getImageSourceUrl(image);
+		if (sourceUrl) {
+			const pathname = new URL(sourceUrl).pathname.split("/").filter(Boolean).pop();
+			if (pathname) return pathname;
+		}
+	} catch {
+		// Fall back to a stable slug-based filename below.
+	}
+
+	return `${sanitizeSegment(fallbackSlug)}.jpg`;
+}
+
+function getImageDimensions(image: unknown) {
+	if (!image || typeof image !== "object") {
+		return { width: null, height: null };
+	}
+
+	const value = image as Record<string, unknown>;
+	return {
+		width: typeof value.width === "number" ? value.width : null,
+		height: typeof value.height === "number" ? value.height : null,
+	};
+}
+
+function getGalleryAssetKey(post: GalleryPost, image: unknown, imageIndex = 0) {
+	const slug = sanitizeSegment(post.slug || post.id);
+	const filename = sanitizeSegment(getImageFilename(image, `${slug}-${imageIndex + 1}`));
+	return `${slug}/${String(imageIndex + 1).padStart(2, "0")}-${filename}`;
+}
+
+function getGalleryVariantUrl(
+	post: GalleryPost,
+	image: unknown,
+	preset: "thumb-sm" | "thumb-md" | "thumb" | "large",
+	sourceUrl: string,
+	imageIndex = 0,
+) {
+	if (sourceUrl.includes("/_emdash/api/media/file/")) {
+		return sourceUrl;
+	}
+
+	const assetKey = getGalleryAssetKey(post, image, imageIndex);
+	const url = new URL(`/gallery-images/${preset}/${assetKey}`, Astro.url.origin);
+	url.searchParams.set("src", sourceUrl);
+	return url.toString();
+}
+
+function buildPhoto(post: GalleryPost, image: unknown, imageIndex = 0) {
+	const sourceUrl = getImageSourceUrl(image);
+	if (!sourceUrl) return null;
+
+	const { width, height } = getImageDimensions(image);
+	const postTitle = post.data.title ?? "Untitled";
+
+	return {
+		id: `${post.id}:${imageIndex}`,
+		postPath: `/posts/${post.slug || post.id}`,
+		postTitle,
+		postPublishedAt: post.data.publishedAt ?? null,
+		displayUrl: getGalleryVariantUrl(post, image, "thumb", sourceUrl, imageIndex),
+		lightboxUrl: getGalleryVariantUrl(post, image, "large", sourceUrl, imageIndex),
+		thumbSmUrl: getGalleryVariantUrl(post, image, "thumb-sm", sourceUrl, imageIndex),
+		thumbMdUrl: getGalleryVariantUrl(post, image, "thumb-md", sourceUrl, imageIndex),
+		alt: getImageAlt(image, postTitle),
+		width,
+		height,
+	};
+}
+
+const posts = Array.from(
+	new Map(
+		[...galleryResult.entries, ...photographyResult.entries, ...fieldNotesResult.entries].map((post) => [
+			post.id,
+			post,
+		]),
+	).values(),
+).sort((left, right) => {
+	const leftDate = left.data.publishedAt ? new Date(left.data.publishedAt).getTime() : 0;
+	const rightDate = right.data.publishedAt ? new Date(right.data.publishedAt).getTime() : 0;
+	return rightDate - leftDate;
+});
+
+const photos = posts.flatMap((post) => {
+	const images = [post.data.featured_image, ...getPortableTextImages(post.data.content)].filter(Boolean);
+	const uniqueImages = Array.from(
+		new Map(
+			images
+				.map((image) => {
+					const sourceUrl = getImageSourceUrl(image);
+					return sourceUrl ? [sourceUrl, image] : null;
+				})
+				.filter(Boolean)
+				.map((entry) => entry as [string, unknown]),
+		).values(),
+	);
+
+	const photoSet = uniqueImages
+		.map((image, imageIndex) => buildPhoto(post, image, imageIndex))
+		.filter(Boolean);
+
+	if (photoSet.length) {
+		return photoSet;
+	}
+
+	const fallbackPhoto = buildPhoto(post, post.data.featured_image, 0);
+	return fallbackPhoto ? [fallbackPhoto] : [];
+});
+const visiblePhotos = photos.slice(0, GALLERY_INITIAL_PHOTO_LIMIT);
+---
+
+<Base title="Photos" description="Photographs, street scenes, landscapes, and visual notes.">
+	<section class="stream-head">
+		<h1 class="stream-head__title">Visual Notes</h1>
+		<div class="stream-head__lede">
+			<p>
+				Most of these are photos of places I've visited, street scenes, and landscapes.
+				Photography is just a hobby for me, and I'm still learning and trying new things.
+				It's just another way for me to express myself.
+			</p>
+		</div>
+	</section>
+
+	<section class="photo-grid" aria-label="Photo gallery">
+		{visiblePhotos.map((photo, index) => (
+			<article class="photo-card">
+				<button
+					class="photo-card__image-link"
+					type="button"
+					data-lightbox-open
+					data-lightbox-index={index}
+					aria-label={`Open ${photo.postTitle}`}
+				>
+					<img
+						class="photo-card__image"
+						src={photo.displayUrl}
+						srcset={`${photo.thumbSmUrl} 360w, ${photo.thumbMdUrl} 720w, ${photo.displayUrl} 1080w`}
+						sizes="(max-width: 640px) 48vw, 31vw"
+						alt={photo.alt || photo.postTitle}
+						width={photo.width || undefined}
+						height={photo.height || undefined}
+						loading="lazy"
+						decoding="async"
+					/>
+					<span class="photo-card__overlay">
+						<span class="photo-card__title">{photo.postTitle}</span>
+						<span class="photo-card__meta">
+							<time class="photo-card__date">
+								{photo.postPublishedAt
+									? photo.postPublishedAt.toLocaleDateString("en-US", {
+											month: "short",
+											day: "numeric",
+											year: "numeric",
+										})
+									: ""}
+							</time>
+							<span class="photo-card__source">View post</span>
+						</span>
+					</span>
+				</button>
+			</article>
+		))}
+	</section>
+
+	<div class="lightbox" hidden data-lightbox-root role="dialog" aria-modal="true" aria-label="Photo viewer">
+		<button class="lightbox__backdrop" type="button" data-lightbox-close aria-label="Close photo viewer"></button>
+		<div class="lightbox__dialog">
+			<button class="lightbox__close" type="button" data-lightbox-close aria-label="Close">
+				×
+			</button>
+			<button class="lightbox__nav lightbox__nav--prev" type="button" data-lightbox-prev aria-label="Previous image">
+				‹
+			</button>
+			<button class="lightbox__nav lightbox__nav--next" type="button" data-lightbox-next aria-label="Next image">
+				›
+			</button>
+			<figure class="lightbox__figure">
+				<img class="lightbox__image" data-lightbox-image src="" alt="" />
+				<figcaption class="lightbox__caption">
+					<a data-lightbox-link href="/gallery">Photo post</a>
+					<span data-lightbox-date></span>
+				</figcaption>
+			</figure>
+		</div>
+	</div>
+
+	<script
+			type="application/json"
+			id="gallery-lightbox-data"
+			set:html={JSON.stringify(
+				visiblePhotos.map((photo) => ({
+					postPath: photo.postPath,
+					postTitle: photo.postTitle,
+					postPublishedAt: photo.postPublishedAt?.toISOString() ?? "",
+					lightboxUrl: photo.lightboxUrl,
+					alt: photo.alt || photo.postTitle,
+			})),
+		)}
+	></script>
+
+	<script is:inline>
+		(() => {
+			if (document.readyState === "loading") {
+				document.addEventListener("DOMContentLoaded", init, { once: true });
+				return;
+			}
+
+			init();
+
+			function init() {
+			const root = document.querySelector("[data-lightbox-root]");
+			const image = document.querySelector("[data-lightbox-image]");
+			const link = document.querySelector("[data-lightbox-link]");
+			const date = document.querySelector("[data-lightbox-date]");
+			const dataScript = document.getElementById("gallery-lightbox-data");
+			const items = JSON.parse(dataScript?.textContent || "[]");
+			const openButtons = Array.from(document.querySelectorAll("[data-lightbox-open]"));
+			const closeButtons = Array.from(document.querySelectorAll("[data-lightbox-close]"));
+			const prevButton = document.querySelector("[data-lightbox-prev]");
+			const nextButton = document.querySelector("[data-lightbox-next]");
+			let activeIndex = null;
+
+			function render(index) {
+				if (!items.length || !root || !image || !link || !date) return;
+				const item = items[index];
+				if (!item) return;
+
+				activeIndex = index;
+				image.src = item.lightboxUrl;
+				image.alt = item.alt;
+				link.href = item.postPath;
+				link.textContent = item.postTitle;
+				date.textContent = item.postPublishedAt
+					? new Date(item.postPublishedAt).toLocaleDateString("en-US", {
+							month: "short",
+							day: "numeric",
+							year: "numeric",
+						})
+					: "";
+				root.removeAttribute("hidden");
+				document.body.style.overflow = "hidden";
+			}
+
+			function close() {
+				if (!root) return;
+				activeIndex = null;
+				root.setAttribute("hidden", "");
+				document.body.style.overflow = "";
+			}
+
+			function showNext() {
+				if (activeIndex === null || !items.length) return;
+				render((activeIndex + 1) % items.length);
+			}
+
+			function showPrevious() {
+				if (activeIndex === null || !items.length) return;
+				render((activeIndex - 1 + items.length) % items.length);
+			}
+
+			openButtons.forEach((button) => {
+				button.addEventListener("click", () => {
+					const index = Number.parseInt(button.getAttribute("data-lightbox-index") || "", 10);
+					if (Number.isFinite(index)) render(index);
+				});
+			});
+
+			closeButtons.forEach((button) => button.addEventListener("click", close));
+			prevButton?.addEventListener("click", showPrevious);
+			nextButton?.addEventListener("click", showNext);
+
+			document.addEventListener("keydown", (event) => {
+				if (activeIndex === null) return;
+				if (event.key === "Escape") close();
+				if (event.key === "ArrowLeft") showPrevious();
+				if (event.key === "ArrowRight") showNext();
+			});
+			}
+		})();
+	</script>
+</Base>
+
+<style>
+	.photo-grid {
+		columns: 3;
+		column-gap: 0.75rem;
+	}
+
+	.photo-card {
+		position: relative;
+		break-inside: avoid;
+		margin: 0 0 0.75rem;
+	}
+
+	.photo-card__image-link {
+		position: relative;
+		display: block;
+		width: 100%;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		cursor: pointer;
+		text-decoration: none;
+		text-align: left;
+		overflow: hidden;
+		border-radius: 0.25rem;
+	}
+
+	.photo-card__image {
+		display: block;
+		width: 100%;
+		height: auto;
+		border-radius: 0.25rem;
+		background: color-mix(in srgb, var(--surface) 82%, white 18%);
+		transition:
+			transform 180ms ease,
+			filter 180ms ease;
+	}
+
+	.photo-card__overlay {
+		position: absolute;
+		right: 0.8rem;
+		bottom: 0.8rem;
+		left: 0.8rem;
+		display: grid;
+		justify-items: start;
+		gap: 0.15rem;
+		color: #ffffff;
+		opacity: 0;
+		transform: translateY(0.6rem);
+		transition:
+			opacity 0.18s ease,
+			transform 0.18s ease;
+		pointer-events: none;
+		z-index: 2;
+	}
+
+	.photo-card::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(180deg, rgba(0, 0, 0, 0) 36%, rgba(0, 0, 0, 0.68) 100%);
+		opacity: 0;
+		transition: opacity 0.18s ease;
+		pointer-events: none;
+		border-radius: 0.25rem;
+	}
+
+	.photo-card__title {
+		font-family: "Fira Sans", sans-serif;
+		font-style: normal;
+		font-weight: 800;
+		letter-spacing: -0.03em;
+	}
+
+	.photo-card__meta {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		font-size: 0.82rem;
+	}
+
+	@media (hover: hover) {
+		.photo-card__image-link:hover .photo-card__image,
+		.photo-card__image-link:focus-visible .photo-card__image {
+			transform: scale(1.012);
+			filter: saturate(1.02);
+		}
+
+		.photo-card:hover::after,
+		.photo-card:hover .photo-card__overlay,
+		.photo-card:focus-within::after,
+		.photo-card:focus-within .photo-card__overlay {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@media (hover: none) {
+		.photo-card__overlay,
+		.photo-card::after {
+			display: none;
+		}
+	}
+
+	.lightbox {
+		position: fixed;
+		inset: 0;
+		z-index: 6000;
+	}
+
+	.lightbox__backdrop {
+		position: absolute;
+		inset: 0;
+		border: 0;
+		background: rgba(10, 10, 10, 0.88);
+		cursor: pointer;
+	}
+
+	.lightbox__dialog {
+		position: relative;
+		z-index: 1;
+		height: 100%;
+		display: grid;
+		place-items: center;
+		padding: 2rem;
+	}
+
+	.lightbox__figure {
+		margin: 0;
+		max-width: min(90vw, 1200px);
+		max-height: 90vh;
+		display: grid;
+		gap: 0.9rem;
+	}
+
+	.lightbox__image {
+		display: block;
+		max-width: 100%;
+		max-height: calc(90vh - 4rem);
+		margin: 0 auto;
+		border-radius: 0.35rem;
+	}
+
+	.lightbox__caption {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		color: #f4f4f1;
+		font-size: 0.92rem;
+	}
+
+	.lightbox__caption a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.lightbox__close,
+	.lightbox__nav {
+		position: absolute;
+		border: 0;
+		background: rgba(19, 20, 21, 0.7);
+		color: #ffffff;
+		cursor: pointer;
+	}
+
+	.lightbox__close {
+		top: 1rem;
+		right: 1rem;
+		width: 2.5rem;
+		height: 2.5rem;
+		border-radius: 999px;
+		font-size: 1.8rem;
+		line-height: 1;
+	}
+
+	.lightbox__nav {
+		top: 50%;
+		transform: translateY(-50%);
+		width: 3rem;
+		height: 3rem;
+		border-radius: 999px;
+		font-size: 2rem;
+		line-height: 1;
+	}
+
+	.lightbox__nav--prev {
+		left: 1rem;
+	}
+
+	.lightbox__nav--next {
+		right: 1rem;
+	}
+
+	@media (max-width: 720px) {
+		.photo-grid {
+			columns: 2;
+		}
+
+		.lightbox__dialog {
+			padding: 1rem;
+		}
+
+		.lightbox__caption {
+			flex-direction: column;
+		}
+	}
+</style>

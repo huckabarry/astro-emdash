@@ -1,0 +1,26 @@
+---
+import { getTaxonomyTerms } from "emdash";
+
+interface Props {
+	showCount?: boolean;
+}
+
+const {
+	showCount = false,
+} = Astro.props;
+
+const categories = (await getTaxonomyTerms("category"))
+	.filter((category) => (category.count || 0) > 0)
+	.sort((left, right) => left.label.localeCompare(right.label));
+---
+
+{categories.length ? (
+	<ul class="widget-list">
+		{categories.map((category) => (
+			<li class="widget-list__item">
+				<a class="widget-list__link" href={`/category/${category.slug}`}>{category.label}</a>
+				{showCount ? <span class="widget-list__meta">{category.count}</span> : null}
+			</li>
+		))}
+	</ul>
+) : null}

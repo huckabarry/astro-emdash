@@ -1,0 +1,121 @@
+---
+import { getEmDashCollection, getEmDashEntry, getEntryTerms, getSeoMeta } from "emdash";
+import { PortableText, Image } from "emdash/ui";
+import Base from "../../layouts/Base.astro";
+import { getImageUrl } from "../../lib/afterword";
+import { PUBLIC_ARCHIVE_CACHE_CONTROL } from "../../lib/emdash-content";
+
+const slug = Astro.params.slug || "";
+
+if (!slug) {
+	return Astro.redirect("/404");
+}
+
+const { entry: post, cacheHint, isPreview } = await getEmDashEntry("posts", slug);
+
+if (!post) {
+	return Astro.redirect("/404");
+}
+
+if (!isPreview) {
+	Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
+}
+
+Astro.cache.set(cacheHint);
+
+const tags = await getEntryTerms("posts", post.data.id as string, "tag");
+const { entries: nowPosts } = await getEmDashCollection("posts", {
+	status: "published",
+	where: { tag: "now" },
+	orderBy: { published_at: "desc" },
+});
+
+const currentIndex = nowPosts.findIndex((entry) => entry.id === post.id);
+const previousPost = currentIndex >= 0 ? nowPosts[currentIndex + 1] ?? null : null;
+const nextPost = currentIndex > 0 ? nowPosts[currentIndex - 1] ?? null : null;
+
+const seo = getSeoMeta(post, {
+	siteTitle: "Afterword",
+	siteUrl: Astro.url.origin,
+	path: `/now/${slug}`,
+	defaultOgImage: getImageUrl(post.data.featured_image, Astro.url.origin),
+});
+---
+
+<Base
+	title={seo.title}
+	description={seo.description}
+	image={seo.ogImage}
+	canonical={seo.canonical}
+	robots={seo.robots}
+	type="article"
+	publishedTime={post.data.publishedAt?.toISOString?.() ?? null}
+	modifiedTime={post.data.updatedAt?.toISOString?.() ?? null}
+	content={{ collection: "posts", id: post.data.id as string, slug }}
+>
+	<article class="entry entry--blog h-entry">
+		<div class="entry__meta">
+			<a href="/now">Now</a>
+			{post.data.publishedAt instanceof Date ? (
+				<time class="dt-published" datetime={post.data.publishedAt.toISOString()}>
+					{post.data.publishedAt.toLocaleDateString("en-US", {
+						month: "short",
+						day: "numeric",
+						year: "numeric",
+					})}
+				</time>
+			) : null}
+		</div>
+
+		<h1 class="entry__title p-name">{String(post.data.title || "")}</h1>
+		<a class="p-author h-card" href="/">Bryan Robb</a>
+
+		{tags.length ? (
+			<div class="entry__tags">
+				{tags.map((tag) => (
+					<a class="tag-pill entry__tag p-category" href={`/tags/${tag.slug}`}>
+						{tag.label}
+					</a>
+				))}
+			</div>
+		) : null}
+
+		{post.data.featured_image ? (
+			<figure class="entry__figure">
+				<Image image={post.data.featured_image as never} />
+			</figure>
+		) : null}
+
+		<div class="entry__content e-content">
+			<PortableText value={post.data.content as never} />
+		</div>
+
+		<footer class="post-actions" aria-label="Post actions">
+			<a class="post-action-link" href="/hello">Reply by email</a>
+			<a class="post-action-link" href="/now">Back to now</a>
+		</footer>
+
+		{(previousPost || nextPost) ? (
+			<nav class="post-navigation">
+				<ul>
+					<li class="post-navigation-item post-navigation-item-previous">
+						{previousPost ? (
+							<a class="post-navigation-link" href={`/now/${previousPost.id}`}>
+								<span class="post-navigation-label">← Previous</span>
+								<span class="post-navigation-title">{String(previousPost.data.title || "")}</span>
+							</a>
+						) : null}
+					</li>
+					<li class="post-navigation-item post-navigation-item-next">
+						{nextPost ? (
+							<a class="post-navigation-link" href={`/now/${nextPost.id}`}>
+								<span class="post-navigation-label">Next →</span>
+								<span class="post-navigation-title">{String(nextPost.data.title || "")}</span>
+							</a>
+						) : null}
+					</li>
+				</ul>
+			</nav>
+		) : null}
+	</article>
+</Base>

@@ -1,0 +1,63 @@
+---
+import { getMenu } from "emdash";
+import type { Widget } from "emdash";
+import { PortableText } from "emdash/ui";
+import RecentPostsWidget from "./widgets/RecentPostsWidget.astro";
+import CategoriesWidget from "./widgets/CategoriesWidget.astro";
+import TagCloudWidget from "./widgets/TagCloudWidget.astro";
+import SearchFormWidget from "./widgets/SearchFormWidget.astro";
+
+interface Props {
+	widget: Widget;
+}
+
+const { widget } = Astro.props;
+
+const componentMap = {
+	"core:recent-posts": RecentPostsWidget,
+	"core:categories": CategoriesWidget,
+	"core:tags": TagCloudWidget,
+	"core:search": SearchFormWidget,
+} as const;
+
+const menu = widget.type === "menu" && widget.menuName
+	? await getMenu(widget.menuName)
+	: null;
+
+const Component = widget.type === "component" && widget.componentId
+	? componentMap[widget.componentId as keyof typeof componentMap]
+	: null;
+---
+
+<section class="widget">
+	{widget.title ? <h2 class="widget-title">{widget.title}</h2> : null}
+
+	{widget.type === "content" && widget.content ? (
+		<div class="widget-content">
+			<PortableText value={widget.content} />
+		</div>
+	) : null}
+
+	{widget.type === "menu" && menu ? (
+		<nav class="widget-menu" aria-label={widget.title || menu.name}>
+			<ul class="widget-list">
+				{menu.items.map((item) => (
+					<li class="widget-list__item">
+						<a
+							class="widget-list__link"
+							href={item.url}
+							target={item.target || undefined}
+							rel={item.target === "_blank" ? "noreferrer" : undefined}
+						>
+							{item.label}
+						</a>
+					</li>
+				))}
+			</ul>
+		</nav>
+	) : null}
+
+	{widget.type === "component" && Component ? (
+		<Component {...(widget.componentProps || {})} />
+	) : null}
+</section>

@@ -1,0 +1,135 @@
+---
+import Base from "../../layouts/Base.astro";
+import { EARLIER_WEB_STREAM_PAGE_SIZE, getEarlierWebStreamHydratedPage } from "../../lib/earlier-web";
+
+const stream = await getEarlierWebStreamHydratedPage({ limit: EARLIER_WEB_STREAM_PAGE_SIZE });
+---
+
+<Base title="Earlier Web Stream | Afterword" description="A chronological stream of older posts, captions, and fragments from earlier versions of Bryan's life online.">
+	<section class="section-block">
+		<h1 class="section-title">From an Earlier Web</h1>
+		<article class="content content-page">
+			<div class="post-full-content">
+				<section class="content-body">
+					<p>
+						A chronological stream of older posts, captions, and fragments from earlier versions of my life online.
+					</p>
+					<p class="earlier-web-stream__nav">
+						<a href="/earlier-web">Browse by year</a>
+					</p>
+				</section>
+			</div>
+		</article>
+	</section>
+
+	{stream.posts.length ? (
+		<section class="section-block">
+			<article class="content content-page">
+				<div class="post-full-content">
+					<section class="content-body">
+						<div class="earlier-web-stream" aria-label="Earlier web stream">
+							{stream.posts.map((post) => (
+								<article class="earlier-web-stream__entry">
+									<div class="earlier-web-stream__body">
+										<p class="earlier-web-stream__meta">
+											<time datetime={post.publishedAt}>
+												{new Date(post.publishedAt).toLocaleDateString("en-US", {
+													year: "numeric",
+													month: "short",
+													day: "numeric",
+												})}
+											</time>
+											<span>·</span>
+											<span>{post.year}</span>
+										</p>
+										<div class="earlier-web-stream__content" set:html={post.bodyHtml}></div>
+										<p class="earlier-web-stream__permalink"><a href={post.path}>Open post</a></p>
+									</div>
+								</article>
+							))}
+						</div>
+
+						<div class="earlier-web-stream__footer">
+							<p>Showing {stream.posts.length} posts</p>
+							{stream.cursor ? <a class="tag-pill" href={`/earlier-web/feed.json?cursor=${encodeURIComponent(stream.cursor)}&limit=${stream.limit}`}>Open next page JSON</a> : null}
+						</div>
+					</section>
+				</div>
+			</article>
+		</section>
+	) : (
+		<section class="section-block">
+			<p>No archive posts are available yet.</p>
+		</section>
+	)}
+</Base>
+
+<style>
+	.earlier-web-stream__nav a {
+		color: inherit;
+	}
+
+	.earlier-web-stream {
+		display: grid;
+		gap: 1.75rem;
+	}
+
+	.earlier-web-stream__entry {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid rgba(255, 255, 255, 0.08);
+		align-items: start;
+	}
+
+	.earlier-web-stream__content :global(p) {
+		margin: 0 0 1rem;
+	}
+
+	.earlier-web-stream__content :global(.earlier-web-post__figure) {
+		margin: 1rem 0 1.25rem;
+	}
+
+	.earlier-web-stream__content :global(.earlier-web-post__gallery) {
+		display: grid;
+		gap: 0.9rem;
+		margin: 1rem 0 1.25rem;
+	}
+
+	.earlier-web-stream__content :global(.earlier-web-post__gallery .earlier-web-post__figure) {
+		margin: 0;
+	}
+
+	.earlier-web-stream__content :global(img) {
+		display: block;
+		max-width: 100%;
+		height: auto;
+		border-radius: 0.25rem;
+	}
+
+	.earlier-web-stream__permalink {
+		margin-top: 0.25rem;
+		font-size: 0.92rem;
+	}
+
+	.earlier-web-stream__permalink a {
+		color: inherit;
+		text-decoration: underline;
+	}
+
+	.earlier-web-stream__meta {
+		display: flex;
+		gap: 0.4rem;
+		margin-bottom: 0.7rem;
+		font-size: 0.88rem;
+		opacity: 0.72;
+	}
+
+	.earlier-web-stream__footer {
+		display: grid;
+		justify-items: start;
+		gap: 0.8rem;
+		margin-top: 1.25rem;
+	}
+ </style>

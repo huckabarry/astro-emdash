@@ -1,0 +1,84 @@
+---
+import { getTerm, getEmDashCollection } from "emdash";
+import Base from "../../layouts/Base.astro";
+import {
+	PUBLIC_ARCHIVE_CACHE_CONTROL,
+	fallbackTagLabel,
+	getPostTagSlugs,
+} from "../../lib/emdash-content";
+
+Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
+
+const slug = Astro.params.slug || "";
+const tag = slug ? await getTerm("tag", slug) : null;
+
+if (!tag) {
+	return Astro.redirect("/404");
+}
+
+const { entries, cacheHint } = await getEmDashCollection("posts", {
+	status: "published",
+	where: { tag: tag.slug },
+	orderBy: { published_at: "desc" },
+});
+
+Astro.cache.set(cacheHint);
+
+const uniqueTagSlugs = [...new Set(entries.flatMap((post) => getPostTagSlugs(post)))];
+const tagEntries = await Promise.all(
+	uniqueTagSlugs.map(async (tagSlug) => [tagSlug, await getTerm("tag", tagSlug)] as const),
+);
+const tagMap = new Map(
+	tagEntries.map(([tagSlug, entry]) => [
+		tagSlug,
+		{ slug: tagSlug, label: entry?.label || fallbackTagLabel(tagSlug) },
+	]),
+);
+const posts = entries.map((post) => ({
+	post,
+	tags: getPostTagSlugs(post).map(
+		(tagSlug) => tagMap.get(tagSlug) ?? { slug: tagSlug, label: fallbackTagLabel(tagSlug) },
+	),
+}));
+---
+
+<Base title={`${tag.label} | Bryan Robb`} description={`Posts tagged ${tag.label}.`}>
+	<section class="stream-head">
+		<h1 class="stream-head__title">{tag.label}</h1>
+		<p class="stream-head__lede">Posts tagged {tag.label}.</p>
+	</section>
+
+	<section class="blog-list blog-list--archive" aria-label="Tagged posts">
+		{posts.length ? (
+			posts.map(({ post, tags }) => (
+				<article class="blog-row">
+					<a class="blog-row__link" href={`/posts/${post.id}`}>
+						<time class="blog-row__date" datetime={post.data.publishedAt?.toISOString?.()}>
+							{post.data.publishedAt instanceof Date
+								? post.data.publishedAt.toLocaleDateString("en-GB", {
+										day: "2-digit",
+										month: "short",
+										year: "numeric",
+									})
+								: ""}
+						</time>
+						{tags.length ? (
+							<div class="blog-row__tags">
+								{tags.map((entryTag) => (
+									<span class="tag-pill blog-row__tag">{entryTag.label}</span>
+								))}
+							</div>
+						) : null}
+						<h2>{String(post.data.title || "")}</h2>
+						<p>{String(post.data.excerpt || "")}</p>
+						<span class="blog-row__read-more">Read more <span aria-hidden="true">→</span></span>
+					</a>
+				</article>
+			))
+		) : (
+			<article class="blog-row">
+				<p>No posts are available for this tag yet.</p>
+			</article>
+		)}
+	</section>
+</Base>

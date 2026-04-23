@@ -1,0 +1,76 @@
+---
+import { getEmDashEntry, getSection } from "emdash";
+import { PortableText } from "emdash/ui";
+import Base from "../../layouts/Base.astro";
+import { PUBLIC_ARCHIVE_CACHE_CONTROL } from "../../lib/emdash-content";
+
+Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
+
+const [{ entry: page, cacheHint }, interestsSection] = await Promise.all([
+	getEmDashEntry("pages", "about", { locale: "it" }),
+	getSection("about-interests"),
+]);
+
+if (!page) {
+	return Astro.redirect("/404");
+}
+
+Astro.cache.set(cacheHint);
+
+function portableTextPlainText(value: unknown) {
+	if (!Array.isArray(value)) return null;
+	const text = value
+		.flatMap((block) => {
+			if (!block || typeof block !== "object") return [];
+			const children = (block as { children?: unknown }).children;
+			if (!Array.isArray(children)) return [];
+			return children.map((child) => {
+				if (!child || typeof child !== "object") return "";
+				const t = (child as { text?: unknown }).text;
+				return typeof t === "string" ? t : "";
+			});
+		})
+		.join("\n")
+		.trim();
+	return text || null;
+}
+
+function parseInterestsFromSection(section: unknown): string[] {
+	const content = (section as { content?: unknown } | null)?.content;
+	const raw = portableTextPlainText(content);
+	if (!raw) return [];
+
+	const normalized = raw
+		.replace(/\r/g, "")
+		.split("\n")
+		.map((line) => line.replace(/^[-*•]\s+/, "").trim())
+		.filter(Boolean)
+		.join("\n");
+
+	const candidates = normalized.includes(",") ? normalized.split(",") : normalized.split("\n");
+	return candidates.map((item) => item.trim()).filter(Boolean);
+}
+
+const interests = parseInterestsFromSection(interestsSection);
+---
+
+<Base title="Chi sono" description="Una breve introduzione ad Afterword e agli interessi che attraversano il sito.">
+	<section class="section-block">
+		<h1 class="section-title">Chi sono</h1>
+		<article class="content content-page">
+			<div class="post-full-content">
+				<section class="content-body locale-copy">
+					<PortableText value={page.data.content} />
+					{interests.length ? (
+						<>
+							<h2>Interessi</h2>
+							<div class="about-interests" aria-label="Interessi">
+								{interests.map((interest) => <span class="tag-pill">{interest}</span>)}
+							</div>
+						</>
+					) : null}
+				</section>
+			</div>
+		</article>
+	</section>
+</Base>

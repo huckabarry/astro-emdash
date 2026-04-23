@@ -1,0 +1,79 @@
+---
+import Base from "../../layouts/Base.astro";
+import { getTrackBySlug, getTracks } from "../../lib/media";
+
+const slug = Astro.params.slug || "";
+const [track, tracks] = await Promise.all([getTrackBySlug(slug), getTracks()]);
+
+if (!track) {
+	return Astro.redirect("/404");
+}
+
+const index = tracks.findIndex((item) => item.slug === track.slug);
+const previousTrack = index >= 0 ? tracks[index + 1] || null : null;
+const nextTrack = index > 0 ? tracks[index - 1] || null : null;
+---
+
+<Base title={`${track.trackTitle} | Listening Now`} description={track.note || track.excerpt}>
+	<article class="entry entry--media">
+		<div class="entry__meta">
+			<a href="/listening">Listening Now</a>
+			<time>{track.displayDate}</time>
+		</div>
+		<div class="media-entry media-entry--track">
+			{track.artworkUrl ? (
+				<figure class="media-entry__cover">
+					<img src={track.artworkUrl} alt={track.trackTitle} />
+				</figure>
+			) : null}
+			<div class="media-entry__body">
+				<h1 class="entry__title">{track.trackTitle}</h1>
+				{track.artist ? <p class="media-entry__credit">{track.artist}</p> : null}
+				<div class="media-entry__note entry__content" set:html={track.noteHtml || `<p>${track.note}</p>`}></div>
+				{track.previewUrl ? (
+					<div class="track-preview">
+						<h2 class="media-entry__links-title">Preview</h2>
+						<audio controls preload="none" src={track.previewUrl}></audio>
+					</div>
+				) : null}
+				{track.listenLinks.length ? (
+					<div class="media-entry__links">
+						<h2 class="media-entry__links-title">Listen</h2>
+						<ul class="media-entry__links-list">
+							{track.listenLinks.map((link) => (
+								<li><a href={link.url} target="_blank" rel="noreferrer">{link.label}</a></li>
+							))}
+						</ul>
+					</div>
+				) : null}
+			</div>
+		</div>
+
+		<footer class="post-actions" aria-label="Post actions">
+			<a class="post-action-link" href="/listening">Back to all track notes</a>
+		</footer>
+
+		{previousTrack || nextTrack ? (
+			<nav class="post-navigation">
+				<ul>
+					<li class="post-navigation-item post-navigation-item-previous">
+						{previousTrack ? (
+							<a class="post-navigation-link" href={previousTrack.localPath}>
+								<span class="post-navigation-label">← Previous</span>
+								<span class="post-navigation-title">{previousTrack.trackTitle}</span>
+							</a>
+						) : null}
+					</li>
+					<li class="post-navigation-item post-navigation-item-next">
+						{nextTrack ? (
+							<a class="post-navigation-link" href={nextTrack.localPath}>
+								<span class="post-navigation-label">Next →</span>
+								<span class="post-navigation-title">{nextTrack.trackTitle}</span>
+							</a>
+						) : null}
+					</li>
+				</ul>
+			</nav>
+		) : null}
+	</article>
+</Base>

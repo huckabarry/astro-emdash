@@ -1,0 +1,31 @@
+---
+import { getTaxonomyTerms } from "emdash";
+
+interface Props {
+	showCount?: boolean;
+	limit?: number;
+}
+
+const {
+	showCount = false,
+	limit = 12,
+} = Astro.props;
+
+const hiddenTags = new Set(["earlier-web", "instagram"]);
+const tags = (await getTaxonomyTerms("tag"))
+	.filter((tag) => (tag.count || 0) > 0)
+	.filter((tag) => !hiddenTags.has(tag.slug))
+	.sort((left, right) => (right.count || 0) - (left.count || 0))
+	.slice(0, Math.max(1, Number(limit) || 12));
+---
+
+{tags.length ? (
+	<div class="widget-pill-list">
+		{tags.map((tag) => (
+			<a class="tag-pill" href={`/tags/${tag.slug}`}>
+				{tag.label}
+				{showCount ? ` (${tag.count || 0})` : ""}
+			</a>
+		))}
+	</div>
+) : null}

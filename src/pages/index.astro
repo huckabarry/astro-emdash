@@ -1,448 +1,441 @@
 ---
-import { getEmDashCollection, getEntryTerms } from "emdash";
-import { Image } from "emdash/ui";
+import { getEmDashCollection, getSection, getWidgetArea } from "emdash";
+import { PortableText } from "emdash/ui";
 import Base from "../layouts/Base.astro";
-import PostCard from "../components/PostCard.astro";
-import { getReadingTime } from "../utils/reading-time";
+import WidgetRenderer from "../components/WidgetRenderer.astro";
+import { getImageUrl, formatDisplayDate } from "../lib/afterword";
+import { getStatusFeedPage, type StatusFeedItem } from "../lib/status-feed";
+import {
+	PUBLIC_ARCHIVE_CACHE_CONTROL,
+	getPostStringField,
+} from "../lib/emdash-content";
 
-const { entries: posts, cacheHint } = await getEmDashCollection("posts");
+Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
 
-Astro.cache.set(cacheHint);
+const [statusPage, fieldNotesResult, homeIntroSection] = await Promise.all([
+	getStatusFeedPage({ limit: 5, includeReplies: false }),
+	getEmDashCollection("posts", {
+		status: "published",
+		where: { tag: "field-notes" },
+		orderBy: { published_at: "desc" },
+		limit: 6,
+	}),
+	getSection("home-intro"),
+]);
 
-const sortedPosts = posts.toSorted((a, b) => {
-	const dateA = a.data.publishedAt?.getTime() ?? 0;
-	const dateB = b.data.publishedAt?.getTime() ?? 0;
-	return dateB - dateA;
-});
+Astro.cache.set(fieldNotesResult.cacheHint);
 
-// Find the first post with a featured image for the hero
-const featuredPost = sortedPosts.find((p) => p.data.featured_image);
-const featuredIndex = featuredPost ? sortedPosts.indexOf(featuredPost) : -1;
+const fieldNotesPosts = fieldNotesResult.entries.filter(
+	(post) => getPostStringField(post, "source_type") !== "earlier-web",
+);
+const homeBelowStatusWidgetArea = await getWidgetArea("home-below-status");
 
-// Get remaining posts (exclude featured if found, limit to 6 for grid)
-const gridPosts = sortedPosts.filter((_, i) => i !== featuredIndex).slice(0, 6);
-
-// Total posts shown = featured (if any) + grid posts
-const totalShown = (featuredPost ? 1 : 0) + gridPosts.length;
-const hasMorePosts = sortedPosts.length > totalShown;
-
-// Fetch tags for featured post (bylines are already hydrated by getEmDashCollection)
-let featuredTags: Array<{ slug: string; label: string }> = [];
-const featuredBylines = featuredPost?.data.bylines ?? [];
-if (featuredPost) {
-	const tags = await getEntryTerms("posts", featuredPost.data.id, "tag");
-	featuredTags = tags.map((t) => ({ slug: t.slug, label: t.label }));
+function formatStatusDate(value: Date) {
+	return new Intl.DateTimeFormat("en-US", {
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+	}).format(value);
 }
 
-// Fetch tags for grid posts (bylines are already hydrated by getEmDashCollection)
-const gridPostsWithTags = await Promise.all(
-	gridPosts.map(async (post) => {
-		const tags = await getEntryTerms("posts", post.data.id, "tag");
-		const bylines = post.data.bylines ?? [];
-		return {
-			post,
-			tags: tags.map((t) => ({ slug: t.slug, label: t.label })),
-			bylines,
-		};
-	})
-);
+function socialRepostCount(post: StatusFeedItem) {
+	return (post.repostCount || 0) + (post.quoteCount || 0);
+}
 
-// Format date helper
-function formatDate(date: Date | null | undefined) {
-	if (!date) return null;
-	return date.toLocaleDateString("en-US", {
-		year: "numeric",
-		month: "long",
-		day: "numeric",
-	});
+function getLocalStatusPath(slug: string) {
+	return `/status/${slug}`;
+}
+
+function getVideoLabel(post: StatusFeedItem) {
+	return post.video?.alt?.trim() || "Watch video on Bluesky";
 }
 ---
 
-<Base title="Afterword" description="An Astro and EmDash sandbox for trying things out.">
-	{
-		posts.length === 0 ? (
-			<section class="empty-state">
-				<h2>No posts yet</h2>
-				<p>Create your first post in the admin panel.</p>
-				<a href="/_emdash/admin/content/posts/new" class="btn">
-					Create a post
-				</a>
-			</section>
-		) : (
-			<div class="home-content">
-				{/* Featured Post - Side by side */}
-				{featuredPost && (
-					<section class="featured-section">
-						<div class="featured-grid">
-							<a href={`/posts/${featuredPost.id}`} class="featured-image-link">
-								<div class="featured-image">
-									<Image image={featuredPost.data.featured_image} />
-								</div>
-							</a>
-							<div class="featured-content">
-								<div class="featured-meta">
-									{featuredBylines.length > 0 && (
-										<>
-											<div class="featured-bylines">
-												{featuredBylines.slice(0, 2).map((credit, index) => (
-													<>
-														{index > 0 && <span class="byline-sep">,</span>}
-														<span class="featured-byline">
-															{credit.byline.avatarMediaId && (
-																<img
-																	src={`/_emdash/api/media/file/${credit.byline.avatarMediaId}`}
-																	alt={credit.byline.displayName}
-																	class="featured-byline-avatar"
-																/>
-															)}
-															<span class="featured-byline-name">
-																{credit.byline.displayName}
-															</span>
-														</span>
-													</>
-												))}
-												{featuredBylines.length > 2 && (
-													<span class="byline-more">
-														+{featuredBylines.length - 2}
-													</span>
-												)}
-											</div>
-											<span class="meta-dot" />
-										</>
-									)}
-									{formatDate(featuredPost.data.publishedAt) && (
-										<time>{formatDate(featuredPost.data.publishedAt)}</time>
-									)}
-									<span class="meta-dot" />
-									<span>
-										{getReadingTime(featuredPost.data.content)} min read
-									</span>
-								</div>
-								<a
-									href={`/posts/${featuredPost.id}`}
-									class="featured-title-link"
-								>
-									<h1 class="featured-title">{featuredPost.data.title}</h1>
-								</a>
-								{featuredPost.data.excerpt && (
-									<p class="featured-excerpt">{featuredPost.data.excerpt}</p>
-								)}
-								{featuredTags.length > 0 && (
-									<div class="featured-tags">
-										{featuredTags.map((tag) => (
-											<a href={`/tag/${tag.slug}`} class="featured-tag">
-												{tag.label}
-											</a>
-										))}
-									</div>
-								)}
-							</div>
-						</div>
-					</section>
-				)}
+<Base
+	title="Afterword"
+	description="Short updates, photos, and longer reflections on place, music, design, and daily life."
+>
+	<section class="stream-head">
+		<div class="stream-head__lede">
+			{homeIntroSection?.content?.length ? (
+				<PortableText value={homeIntroSection.content} />
+			) : (
+				<p>
+					Urban planner, photographer, gardener, and habitual maker of things. I use this
+					space for short updates, photos, and longer reflections on place, music, design, and
+					daily life. If you've found your way here and want to say hello, I'd love to hear from
+					you.
+				</p>
+			)}
+		</div>
+	</section>
 
-				{/* Latest Posts */}
-				{gridPostsWithTags.length > 0 && (
-					<section class="posts-section">
-						<header class="section-header">
-							<h2 class="section-title">Latest</h2>
-							{hasMorePosts && (
-								<a href="/posts" class="section-link">
-									View all
-								</a>
-							)}
-						</header>
-						<div class="posts-grid">
-							{gridPostsWithTags.map(({ post, tags, bylines }) => (
-								<PostCard
-									title={post.data.title ?? "Untitled"}
-									excerpt={post.data.excerpt}
-									featuredImage={post.data.featured_image}
-									href={`/posts/${post.id}`}
-									date={post.data.publishedAt ?? undefined}
-									readingTime={getReadingTime(post.data.content)}
-									tags={tags}
-									bylines={bylines}
-								/>
+	<div class="section-stack">
+		<section class="section-block section-block-status">
+			<div class="section-head">
+				<h2 class="section-title">Recent Updates</h2>
+				<div class="home-updates__controls">
+					<button class="home-updates__button" type="button" data-carousel-prev aria-label="Show previous update">
+						Back
+					</button>
+					<button class="home-updates__button" type="button" data-carousel-next aria-label="Show next update">
+						Next
+					</button>
+				</div>
+			</div>
+
+			{statusPage.statuses.length ? (
+				<div class="home-updates section-block-status__card" data-carousel-root data-carousel-step="1">
+					<div class="home-updates__viewport" data-carousel-viewport>
+						<div class="home-updates__track">
+							{statusPage.statuses.map((post, index) => (
+								<article class="home-status-card h-entry" data-carousel-item hidden={index !== 0}>
+									{post.replyTo ? (
+										<p class="home-status-card__reply-context">
+											In reply to
+											<a href={post.replyTo.blueskyUrl} target="_blank" rel="noreferrer">
+												{post.replyTo.displayName || post.replyTo.handle}
+											</a>
+										</p>
+									) : null}
+									<div class="home-status-card__meta">
+										<div class="home-status-card__byline">
+											<span class="home-status-card__name p-author h-card">
+												<span class="p-name">{post.displayName}</span>
+												<span class="u-url" hidden>{post.blueskyUrl}</span>
+											</span>
+											<span class="home-status-card__handle p-nickname">{post.handle}</span>
+											<span aria-hidden="true">·</span>
+											<time class="dt-published" datetime={post.date.toISOString()}>
+												{formatStatusDate(post.date)}
+											</time>
+										</div>
+									</div>
+									<a class="u-url" href={getLocalStatusPath(post.slug)} hidden>
+										{getLocalStatusPath(post.slug)}
+									</a>
+									{post.html ? (
+										<a class="home-status-card__permalink u-url" href={getLocalStatusPath(post.slug)}>
+											<div class="home-status-card__content e-content" set:html={post.html}></div>
+										</a>
+									) : null}
+									{post.quotedPost ? (
+										<a class="status-quote" href={post.quotedPost.blueskyUrl} target="_blank" rel="noreferrer">
+											<div class="status-quote__meta">
+												{post.quotedPost.avatar ? (
+													<img
+														class="status-quote__avatar"
+														src={post.quotedPost.avatar}
+														alt={post.quotedPost.displayName}
+														loading="lazy"
+													/>
+												) : null}
+												<div class="status-quote__byline">
+													<strong>{post.quotedPost.displayName}</strong>
+													<span>{post.quotedPost.handle}</span>
+													<span>·</span>
+													<time datetime={post.quotedPost.date.toISOString()}>
+														{formatStatusDate(post.quotedPost.date)}
+													</time>
+												</div>
+											</div>
+											{post.quotedPost.html ? (
+												<div class="status-quote__content" set:html={post.quotedPost.html}></div>
+											) : null}
+											{post.quotedPost.images.length ? (
+												<div
+													class:list={[
+														"status-row__media",
+														"status-row__media--quoted",
+														post.quotedPost.images.length > 1 && "status-row__media--multi",
+													]}
+												>
+													{post.quotedPost.images.map((image) => (
+														<img src={image.thumb} alt={image.alt || "Quoted post image"} loading="lazy" />
+													))}
+												</div>
+											) : null}
+									{post.quotedPost.external ? (
+												<span class="status-card status-card--quoted">
+													{post.quotedPost.external.thumb ? (
+														<img
+															class="status-card__thumb"
+															src={post.quotedPost.external.thumb}
+															alt={post.quotedPost.external.title || post.quotedPost.external.domain}
+															loading="lazy"
+														/>
+													) : null}
+													<span class="status-card__domain">{post.quotedPost.external.domain}</span>
+													<strong class="status-card__title">{post.quotedPost.external.title}</strong>
+													{post.quotedPost.external.description ? (
+														<span class="status-card__description">
+															{post.quotedPost.external.description}
+														</span>
+													) : null}
+												</span>
+											) : null}
+										</a>
+									) : null}
+									{post.images.length ? (
+										<div
+											class:list={[
+												"status-row__media",
+												post.images.length > 1 && "status-row__media--multi",
+											]}
+										>
+											{post.images.map((image) => (
+												<a class="status-row__image" href={getLocalStatusPath(post.slug)}>
+													<img src={image.thumb} alt={image.alt || "Bluesky image"} loading="lazy" />
+												</a>
+											))}
+										</div>
+									) : null}
+									{post.external ? (
+										<a class="status-card" href={post.external.uri} target="_blank" rel="noreferrer">
+											{post.external.thumb ? (
+												<img
+													class="status-card__thumb"
+													src={post.external.thumb}
+													alt={post.external.title || post.external.domain}
+													loading="lazy"
+												/>
+											) : null}
+											<span class="status-card__domain">{post.external.domain}</span>
+											<strong class="status-card__title">{post.external.title}</strong>
+											{post.external.description ? (
+												<span class="status-card__description">{post.external.description}</span>
+											) : null}
+										</a>
+									) : null}
+									{post.video ? (
+										<a class="status-row__video" href={post.blueskyUrl} target="_blank" rel="noreferrer">
+											{post.video.thumbnail ? (
+												<span class="status-row__video-thumb-wrap">
+													<img
+														class="status-row__video-thumb"
+														src={post.video.thumbnail}
+														alt={getVideoLabel(post)}
+														loading="lazy"
+													/>
+													<span class="status-row__video-badge" aria-hidden="true">Video</span>
+												</span>
+											) : null}
+											<span class="status-row__video-link">{getVideoLabel(post)}</span>
+										</a>
+									) : null}
+									<div class="home-status-card__actions">
+										<div class="status-row__metrics">
+											<a class="status-row__action" href={getLocalStatusPath(post.slug)}>
+												<span class="status-row__icon" aria-hidden="true">
+													<svg viewBox="0 0 24 24" focusable="false">
+														<path d="M6.37 3.93c.53-.51 1.28-.83 2.35-.83h8.03c1.07 0 1.82.32 2.35.83.51.49.83 1.18.83 2.18v5.78c0 1-.32 1.69-.83 2.18-.53.51-1.28.83-2.35.83h-2.84l-4.1 4.1c-.24.24-.49.36-.79.36-.57 0-1.01-.42-1.01-.99V14.9H8.72c-1.07 0-1.82-.32-2.35-.83-.51-.49-.83-1.18-.83-2.18V6.11c0-1 .32-1.69.83-2.18Zm2.35.77c-.72 0-1.05.2-1.25.39-.18.17-.33.45-.33 1.02v5.78c0 .57.15.85.33 1.02.2.19.53.39 1.25.39h1.95v3.07l3.07-3.07h3.03c.72 0 1.05-.2 1.25-.39.18-.17.33-.45.33-1.02V6.11c0-.57-.15-.85-.33-1.02-.2-.19-.53-.39-1.25-.39H8.72Z"></path>
+													</svg>
+												</span>
+												<span>{post.replyCount}</span>
+											</a>
+											<a class="status-row__action" href={getLocalStatusPath(post.slug)}>
+												<span class="status-row__icon" aria-hidden="true">
+													<svg viewBox="0 0 24 24" focusable="false">
+														<path d="M5.05 4.86a.75.75 0 0 1 1.06 0l2.76 2.76a.75.75 0 1 1-1.06 1.06L6.33 7.2v7.05c0 .7.17 1.12.45 1.39.27.27.69.45 1.39.45h5.5a.75.75 0 0 1 0 1.5h-5.5c-1.02 0-1.87-.28-2.45-.86-.58-.58-.89-1.43-.89-2.48V7.2L3.99 8.68a.75.75 0 1 1-1.06-1.06l2.12-2.12Zm13.9 10.46a.75.75 0 0 1 1.06 1.06l-2.76 2.76a.75.75 0 0 1-1.06 0l-2.76-2.76a.75.75 0 1 1 1.06-1.06l1.48 1.48V9.75c0-.7-.17-1.12-.45-1.39-.27-.27-.69-.45-1.39-.45h-5.5a.75.75 0 0 1 0-1.5h5.5c1.02 0 1.87.28 2.45.86.58.58.89 1.43.89 2.48v7.05l1.48-1.48Z"></path>
+													</svg>
+												</span>
+												<span>{socialRepostCount(post)}</span>
+											</a>
+											<a class="status-row__action" href={getLocalStatusPath(post.slug)}>
+												<span class="status-row__icon" aria-hidden="true">
+													<svg viewBox="0 0 24 24" focusable="false">
+														<path d="M16.72 3.8c2.87 0 4.93 2.16 4.93 5.13 0 1.89-.77 3.32-2.08 4.7-1.28 1.35-3.09 2.71-5.17 4.28l-1.89 1.43a.82.82 0 0 1-1 0l-1.89-1.43c-2.08-1.57-3.89-2.93-5.17-4.28-1.31-1.38-2.08-2.81-2.08-4.7 0-2.97 2.06-5.13 4.93-5.13 1.79 0 3.03.89 3.83 1.83.35.41.64.85.87 1.25.23-.4.52-.84.87-1.25.8-.94 2.04-1.83 3.83-1.83Zm0 1.6c-1.19 0-2.02.56-2.61 1.25-.61.71-.96 1.53-1.12 2.03a.82.82 0 0 1-1.56 0c-.16-.5-.51-1.32-1.12-2.03-.59-.69-1.42-1.25-2.61-1.25-1.88 0-3.33 1.38-3.33 3.53 0 1.33.51 2.38 1.64 3.57 1.15 1.21 2.82 2.47 4.94 4.08L12 17.68l1.84-1.39c2.12-1.61 3.79-2.87 4.94-4.08 1.13-1.19 1.64-2.24 1.64-3.57 0-2.15-1.45-3.53-3.33-3.53Z"></path>
+													</svg>
+												</span>
+												<span>{post.likeCount}</span>
+											</a>
+										</div>
+										<div class="status-row__reply-pills">
+											<a class="status-row__reply-pill" href={post.blueskyUrl} target="_blank" rel="noreferrer">
+												<span class="status-row__reply-pill-icon" aria-hidden="true">
+													<svg viewBox="0 0 24 24" focusable="false">
+														<path d="M5.69 4.78c2.35 1.76 4.88 5.33 5.81 7.27.93-1.94 3.46-5.51 5.81-7.27 1.69-1.27 4.43-2.26 4.43.87 0 .63-.36 5.29-.57 6.05-.72 2.66-3.35 3.34-5.69 2.94 4.09.7 5.13 3.04 2.88 5.39-4.27 4.46-6.14-1.12-6.62-2.55-.09-.26-.13-.38-.24-.38s-.15.12-.24.38c-.48 1.43-2.35 7.01-6.62 2.55-2.25-2.35-1.21-4.69 2.88-5.39-2.34.4-4.97-.28-5.69-2.94-.21-.76-.57-5.42-.57-6.05 0-3.13 2.74-2.14 4.43-.87Z"></path>
+													</svg>
+												</span>
+												<span>Reply on Bluesky</span>
+											</a>
+										</div>
+									</div>
+								</article>
 							))}
 						</div>
-					</section>
-				)}
+					</div>
+				</div>
+			) : (
+				<p class="empty-state">No recent updates are available yet.</p>
+			)}
+
+			<div class="home-stream-tags">
+				<a class="tag-pill" href="/status" data-astro-prefetch="viewport">Status</a>
+				<a class="home-updates__more-link" href="/status" data-astro-prefetch="viewport">
+					Read more updates <span aria-hidden="true">→</span>
+				</a>
 			</div>
-		)
-	}
-</Base>
+		</section>
 
-<style>
-	.home-content {
-		max-width: var(--wide-width);
-		margin: 0 auto;
-		padding: var(--spacing-16) var(--spacing-6);
-	}
+		{homeBelowStatusWidgetArea?.widgets.length ? (
+			<section class="section-block section-block-widget-area">
+				<div class="home-widget-area" aria-label={homeBelowStatusWidgetArea.label}>
+					{homeBelowStatusWidgetArea.widgets.map((widget) => (
+						<WidgetRenderer widget={widget} />
+					))}
+				</div>
+			</section>
+		) : null}
 
-	/* Featured Section - Side by side */
-	.featured-section {
-		margin-bottom: var(--spacing-16);
-	}
+		<section class="section-block section-block-writing">
+			<h2 class="section-title">Field Notes</h2>
+			{fieldNotesPosts.length ? (
+				<section class="blog-list">
+					{fieldNotesPosts.map((post) => {
+						const coverImage = getImageUrl(post.data.featured_image, Astro.url.origin);
+						return (
+							<article class="blog-row home-feature-row">
+								<a
+									class="blog-row__link home-feature-row__link"
+									href={`/posts/${post.id}`}
+									data-astro-prefetch="viewport"
+								>
+									{coverImage && (
+										<div class="home-feature-row__media">
+											<img
+												class="home-feature-row__image"
+												src={coverImage}
+												alt={post.data.title}
+												loading="lazy"
+											/>
+										</div>
+									)}
+									<div class="home-feature-row__body">
+										<time class="blog-row__date" datetime={post.data.publishedAt?.toISOString()}>
+											{formatDisplayDate(post.data.publishedAt ?? undefined)}
+										</time>
+										<h3>{post.data.title}</h3>
+										<p>{post.data.excerpt}</p>
+									</div>
+								</a>
+							</article>
+						);
+					})}
+				</section>
+			) : (
+				<p class="empty-state">No field notes are available yet.</p>
+			)}
+			<div class="home-stream-tags">
+				<a class="tag-pill" href="/tags/field-notes" data-astro-prefetch="viewport">Field Notes</a>
+				<a class="home-updates__more-link" href="/field-notes" data-astro-prefetch="viewport">Read more field notes <span aria-hidden="true">→</span></a>
+			</div>
+		</section>
 
-	.featured-grid {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: var(--spacing-8);
-		align-items: center;
-	}
+		<section class="section-block section-block-track">
+			<div class="section-head">
+				<h2 class="section-title">Latest Track</h2>
+				<a class="home-updates__more-link" href="/media" data-astro-prefetch="viewport">
+					More music <span aria-hidden="true">→</span>
+				</a>
+			</div>
+			<div class="home-track">
+				<script
+					is:inline
+					src="https://scripts.brebs.net/crucial-tracks/crucial-tracks.js?user=bryan&desc"
+				></script>
+			</div>
+		</section>
+	</div>
 
-	.featured-image-link {
-		grid-column: 1 / 3;
-		display: block;
-		/* Extend to viewport edge, but cap at -6rem minimum extension */
-		margin-left: min(
-			-6rem,
-			calc(-1 * (var(--spacing-6) + (100vw - var(--wide-width)) / 2))
+	<script>
+		import { prefetch } from "astro:prefetch";
+
+		const carouselRoot = document.querySelector("[data-carousel-root]");
+		const carouselPrev = document.querySelector("[data-carousel-prev]");
+		const carouselNext = document.querySelector("[data-carousel-next]");
+		const carouselViewport = carouselRoot?.querySelector("[data-carousel-viewport]");
+		const carouselItems = carouselRoot ? Array.from(carouselRoot.querySelectorAll("[data-carousel-item]")) : [];
+		const carouselStep = Number(carouselRoot?.getAttribute("data-carousel-step") || 1);
+		let currentPage = 0;
+
+		function syncCarouselHeight() {
+			if (!carouselViewport || !carouselItems.length) return;
+			const visibleItem = carouselItems.find((item) => !item.hasAttribute("hidden"));
+			if (!visibleItem) return;
+			carouselViewport.style.height = `${visibleItem.offsetHeight}px`;
+		}
+
+		function renderCarousel(page) {
+			if (!carouselItems.length) return;
+			const pageCount = Math.max(1, Math.ceil(carouselItems.length / Math.max(carouselStep, 1)));
+			currentPage = ((page % pageCount) + pageCount) % pageCount;
+			const start = currentPage * carouselStep;
+			const end = start + carouselStep;
+
+			carouselItems.forEach((item, index) => {
+				item.toggleAttribute("hidden", index < start || index >= end);
+			});
+
+			window.requestAnimationFrame(syncCarouselHeight);
+		}
+
+		if (carouselRoot && carouselItems.length) {
+			renderCarousel(0);
+			carouselPrev?.addEventListener("click", () => renderCarousel(currentPage - 1));
+			carouselNext?.addEventListener("click", () => renderCarousel(currentPage + 1));
+			window.addEventListener("resize", syncCarouselHeight, { passive: true });
+
+			carouselRoot.querySelectorAll("img").forEach((image) => {
+				if (!image.complete) {
+					image.addEventListener("load", syncCarouselHeight, { once: true });
+				}
+			});
+		}
+
+		const homeTrack = document.querySelector(".home-track");
+
+		function normalizeHomeTrack() {
+			if (!homeTrack) return;
+			homeTrack.querySelectorAll(".crucial_footer_button").forEach((button) => {
+				button.setAttribute("data-home-track-hidden", "");
+				button.closest("div[style*='text-align:center']")?.setAttribute("data-home-track-hidden", "");
+			});
+
+			homeTrack.querySelectorAll(".crucial_entry").forEach((entry) => {
+				entry.style.background = "transparent";
+				entry.style.padding = "0";
+				entry.style.borderRadius = "0";
+			});
+
+			homeTrack.querySelectorAll(".crucial_container").forEach((container) => {
+				container.style.background = "transparent";
+				container.style.padding = "0";
+				container.style.margin = "0";
+				container.style.maxWidth = "none";
+			});
+		}
+
+		normalizeHomeTrack();
+
+		if (homeTrack) {
+			const trackObserver = new MutationObserver(() => normalizeHomeTrack());
+			trackObserver.observe(homeTrack, { childList: true, subtree: true });
+		}
+
+		const timer = window.setTimeout(() => {
+			prefetch("/status");
+			prefetch("/gallery");
+			prefetch("/now");
+			prefetch("/media");
+		}, 2000);
+
+		window.addEventListener(
+			"pagehide",
+			() => {
+				window.clearTimeout(timer);
+			},
+			{ once: true },
 		);
-	}
-
-	.featured-image {
-		overflow: hidden;
-		border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-		background: var(--color-surface);
-	}
-
-	.featured-image img {
-		width: 100%;
-		height: auto;
-		aspect-ratio: 4 / 3;
-		object-fit: cover;
-		transition: transform 0.4s ease;
-	}
-
-	.featured-image-link:hover .featured-image img,
-	.featured-grid:has(.featured-title-link:hover) .featured-image img {
-		transform: scale(1.02);
-	}
-
-	.featured-content {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-4);
-	}
-
-	.featured-meta {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		column-gap: var(--spacing-3);
-		row-gap: var(--spacing-1);
-		font-size: var(--font-size-sm);
-		color: var(--color-muted);
-	}
-
-	.meta-dot {
-		width: 3px;
-		height: 3px;
-		border-radius: 50%;
-		background: var(--color-muted);
-	}
-
-	/* Featured bylines */
-	.featured-bylines {
-		display: flex;
-		align-items: center;
-		gap: 2px;
-	}
-
-	.featured-byline {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--spacing-2);
-	}
-
-	.featured-byline-avatar {
-		width: var(--avatar-size-md);
-		height: var(--avatar-size-md);
-		border-radius: 50%;
-		object-fit: cover;
-	}
-
-	.featured-byline-name {
-		font-weight: 500;
-		color: var(--color-text-secondary);
-	}
-
-	.byline-sep {
-		color: var(--color-muted);
-		margin-right: 2px;
-	}
-
-	.byline-more {
-		font-size: var(--font-size-xs);
-		color: var(--color-muted);
-		margin-left: 2px;
-	}
-
-	.featured-title-link {
-		text-decoration: none;
-		color: inherit;
-	}
-
-	.featured-title {
-		font-size: clamp(var(--font-size-2xl), 4vw, var(--font-size-4xl));
-		font-weight: 700;
-		line-height: var(--leading-tight);
-		letter-spacing: var(--tracking-tight);
-		transition: color var(--transition-fast);
-	}
-
-	.featured-title-link:hover .featured-title,
-	.featured-grid:has(.featured-image-link:hover) .featured-title {
-		color: var(--color-accent);
-	}
-
-	.featured-excerpt {
-		font-size: var(--font-size-lg);
-		line-height: var(--leading-relaxed);
-		color: var(--color-text-secondary);
-	}
-
-	.featured-tags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--spacing-2);
-		margin-top: var(--spacing-2);
-	}
-
-	.featured-tag {
-		display: inline-block;
-		padding: var(--spacing-1) var(--spacing-3);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		background: var(--color-surface);
-		border-radius: var(--radius);
-		text-decoration: none;
-		transition:
-			color var(--transition-fast),
-			background var(--transition-fast);
-	}
-
-	.featured-tag:hover {
-		color: var(--color-text);
-		background: var(--color-border);
-	}
-
-	/* Section header */
-	.section-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
-		margin-bottom: var(--spacing-8);
-		padding-bottom: var(--spacing-4);
-		border-bottom: 1px solid var(--color-border-subtle);
-	}
-
-	.section-title {
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: var(--tracking-wider);
-		color: var(--color-muted);
-	}
-
-	.section-link {
-		font-size: var(--font-size-sm);
-		color: var(--color-accent);
-		text-decoration: none;
-		transition: color var(--transition-fast);
-	}
-
-	.section-link:hover {
-		color: var(--color-accent-hover);
-	}
-
-	/* Posts Grid */
-	.posts-section {
-	}
-
-	.posts-grid {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: var(--spacing-12) var(--spacing-8);
-	}
-
-	/* Empty State */
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: var(--spacing-3);
-		text-align: center;
-		padding: var(--spacing-20) var(--spacing-6);
-		max-width: 400px;
-		margin: 0 auto;
-	}
-
-	.empty-state h2 {
-		font-size: var(--font-size-2xl);
-		font-weight: 600;
-	}
-
-	.empty-state p {
-		color: var(--color-muted);
-	}
-
-	.btn {
-		display: inline-block;
-		margin-top: var(--spacing-4);
-		padding: var(--spacing-3) var(--spacing-6);
-		background: var(--color-accent);
-		color: var(--color-on-accent);
-		text-decoration: none;
-		border-radius: var(--radius);
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		transition: background var(--transition-fast);
-	}
-
-	.btn:hover {
-		background: var(--color-accent-hover);
-	}
-
-	/* Responsive */
-	@media (max-width: 900px) {
-		.home-content {
-			padding: var(--spacing-6) var(--spacing-4) var(--spacing-12);
-		}
-
-		.featured-image-link {
-			margin-left: 0;
-		}
-
-		.featured-grid {
-			grid-template-columns: 1fr;
-			gap: var(--spacing-6);
-		}
-
-		.featured-image {
-			border-radius: var(--radius-lg);
-		}
-
-		.featured-image img {
-			aspect-ratio: 16 / 9;
-		}
-
-		.posts-grid {
-			grid-template-columns: repeat(2, 1fr);
-			gap: var(--spacing-8) var(--spacing-6);
-		}
-	}
-
-	@media (max-width: 600px) {
-		.featured-title {
-			font-size: var(--font-size-2xl);
-		}
-
-		.posts-grid {
-			grid-template-columns: 1fr;
-			gap: var(--spacing-8);
-		}
-	}
-</style>
+	</script>
+</Base>

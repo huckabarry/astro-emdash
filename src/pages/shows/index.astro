@@ -1,0 +1,26 @@
+---
+import Base from "../../layouts/Base.astro";
+import { getPopfeedItemsByType } from "../../lib/media";
+
+const items = await getPopfeedItemsByType("tv_show");
+---
+
+<Base title="Shows" description="Shows from the media log.">
+	<section class="stream-head">
+		<h1 class="stream-head__title">Shows</h1>
+		<p class="stream-head__lede">Shows from the media log.</p>
+	</section>
+
+	<section class="blog-list blog-list--archive" aria-label="Shows">
+		{items.map((item) => (
+			<article class="blog-row">
+				<a class="blog-row__link" href={item.localPath}>
+					<time class="blog-row__date" datetime={item.date.toISOString()}>{item.displayDate}</time>
+					<h2>{item.title}</h2>
+					<p>{item.mainCredit || item.listTypeLabel}</p>
+					<span class="blog-row__read-more">Open show <span aria-hidden="true">→</span></span>
+				</a>
+			</article>
+		))}
+	</section>
+</Base>

@@ -1,0 +1,68 @@
+---
+import Base from "../../../../layouts/Base.astro";
+import { shouldSurfaceEarlierWebTitle, getEarlierWebPostByDateSlug } from "../../../../lib/earlier-web";
+
+const year = Number.parseInt(Astro.params.year || "", 10);
+const month = Number.parseInt(Astro.params.month || "", 10);
+const slug = Astro.params.slug || "";
+
+if (!Number.isInteger(year) || !Number.isInteger(month) || !slug) {
+	return Astro.redirect("/404");
+}
+
+const post = await getEarlierWebPostByDateSlug(year, month, slug);
+
+if (!post) {
+	return Astro.redirect("/404");
+}
+
+const surfaceTitle = shouldSurfaceEarlierWebTitle(post);
+---
+
+<Base title={`${post.title} | From an Earlier Web`} description={post.excerpt || "An earlier-web archive entry."} type="article" publishedTime={post.publishedAt}>
+	<article class="entry entry--blog h-entry">
+		<div class="entry__meta">
+			<a href="/earlier-web">From an Earlier Web</a>
+			<time class="dt-published" datetime={post.publishedAt}>
+				{new Date(post.publishedAt).toLocaleDateString("en-US", {
+					month: "short",
+					day: "numeric",
+					year: "numeric",
+				})}
+			</time>
+		</div>
+
+		{surfaceTitle ? <h1 class="entry__title p-name">{post.title}</h1> : null}
+		<a class="p-author h-card" href="/">Bryan Robb</a>
+
+		<div class="entry__content e-content earlier-web-entry__content" set:html={post.bodyHtml}></div>
+
+		<footer class="post-actions" aria-label="Post actions">
+			<a class="post-action-link" href="/earlier-web">Back to archive</a>
+			<a class="post-action-link" href={`/earlier-web/${year}`}>More from {year}</a>
+		</footer>
+	</article>
+</Base>
+
+<style>
+	.earlier-web-entry__content :global(p) {
+		margin: 0 0 1rem;
+	}
+
+	.earlier-web-entry__content :global(.earlier-web-post__figure) {
+		margin: 1rem 0 1.25rem;
+	}
+
+	.earlier-web-entry__content :global(.earlier-web-post__gallery) {
+		display: grid;
+		gap: 0.9rem;
+		margin: 1rem 0 1.25rem;
+	}
+
+	.earlier-web-entry__content :global(img) {
+		display: block;
+		max-width: 100%;
+		height: auto;
+		border-radius: 0.25rem;
+	}
+ </style>

@@ -1,0 +1,20 @@
+---
+import Base from "../../layouts/Base.astro";
+import PopfeedDetail from "../../components/PopfeedDetail.astro";
+import { getPopfeedItemBySlug, getPopfeedItemsByType } from "../../lib/media";
+
+const slug = Astro.params.slug || "";
+const [item, items] = await Promise.all([getPopfeedItemBySlug("book", slug), getPopfeedItemsByType("book")]);
+
+if (!item) {
+	return Astro.redirect("/404");
+}
+
+const index = items.findIndex((entry) => entry.slug === item.slug);
+const previousItem = index >= 0 ? items[index + 1] || null : null;
+const nextItem = index > 0 ? items[index - 1] || null : null;
+---
+
+<Base title={`${item.title} | Books`} description={item.genres.join(", ") || item.listTypeLabel}>
+	<PopfeedDetail item={item} previousItem={previousItem} nextItem={nextItem} backHref="/books" backLabel="Books" />
+</Base>

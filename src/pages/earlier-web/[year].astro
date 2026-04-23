@@ -1,0 +1,114 @@
+---
+import Base from "../../layouts/Base.astro";
+import { getEarlierWebYearPosts, shouldSurfaceEarlierWebTitle } from "../../lib/earlier-web";
+
+const year = Number.parseInt(Astro.params.year || "", 10);
+
+if (!Number.isInteger(year) || year < 1900 || year > 2100) {
+	return Astro.redirect("/404");
+}
+
+const posts = await getEarlierWebYearPosts(year);
+
+if (!posts.length) {
+	return Astro.redirect("/404");
+}
+
+function formatMonth(month: number) {
+	return new Date(Date.UTC(year, month - 1, 1)).toLocaleString("en-US", { month: "long" });
+}
+
+const postsByMonth = Object.entries(
+	posts.reduce<Record<string, typeof posts>>((groups, post) => {
+		const key = String(post.month);
+		groups[key] = groups[key] || [];
+		groups[key].push(post);
+		return groups;
+	}, {}),
+)
+	.map(([month, monthPosts]) => [Number(month), monthPosts] as const)
+	.sort((left, right) => right[0] - left[0]);
+---
+
+<Base title={`${year} | From an Earlier Web`} description={`Archive notes and fragments from ${year}.`}>
+	<section class="section-block">
+		<h1 class="section-title">From an Earlier Web</h1>
+		<article class="content content-page">
+			<div class="post-full-content">
+				<section class="content-body">
+					<p class="earlier-web-year-back"><a href="/earlier-web">All years</a></p>
+					<h2>{year}</h2>
+
+					{postsByMonth.map(([month, monthPosts]) => (
+						<section class="earlier-web-month">
+							<h3>{formatMonth(month)}</h3>
+							<div class="earlier-web-post-list">
+								{monthPosts.map((post) => (
+									<article class="earlier-web-post-list__item">
+										{!shouldSurfaceEarlierWebTitle(post) ? (
+											<p class="earlier-web-post-list__micro-link">
+												<a href={post.path}>{post.excerpt}</a>
+											</p>
+										) : (
+											<>
+												<h4><a href={post.path}>{post.title}</a></h4>
+												<p>{post.excerpt}</p>
+											</>
+										)}
+									</article>
+								))}
+							</div>
+						</section>
+					))}
+				</section>
+			</div>
+		</article>
+	</section>
+</Base>
+
+<style>
+	.earlier-web-year-back {
+		margin-bottom: 1rem;
+	}
+
+	.earlier-web-year-back a {
+		color: inherit;
+	}
+
+	.earlier-web-month + .earlier-web-month {
+		margin-top: 2rem;
+	}
+
+	.earlier-web-post-list {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.earlier-web-post-list__item {
+		padding-top: 1rem;
+		border-top: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	.earlier-web-post-list__item h4 {
+		margin: 0 0 0.4rem;
+		font-size: 1.05rem;
+	}
+
+	.earlier-web-post-list__item a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.earlier-web-post-list__item a:hover {
+		text-decoration: underline;
+	}
+
+	.earlier-web-post-list__item p {
+		margin: 0;
+		opacity: 0.82;
+	}
+
+	.earlier-web-post-list__micro-link {
+		margin: 0;
+	}
+</style>

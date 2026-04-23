@@ -1,0 +1,98 @@
+---
+import Base from "../../layouts/Base.astro";
+import { PUBLIC_ARCHIVE_CACHE_CONTROL } from "../../lib/emdash-content";
+
+Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
+---
+
+<Base
+	title="Afterword in Italiano"
+	description="Una piccola porta d’ingresso italiana ad Afterword, con alcune pagine tradotte e il resto del sito ancora disponibile in inglese."
+>
+	<section class="section-block locale-page">
+		<h1 class="section-title">Afterword, in piccolo, in italiano</h1>
+		<div class="content content-page">
+			<div class="post-full-content">
+				<section class="content-body locale-page__body">
+					<p>
+						Questa e una piccola versione italiana del sito. Per ora ho tradotto soltanto
+						alcune parti fisse e la navigazione. I flussi piu vivi, come status, media e
+						check-in, restano soprattutto in inglese.
+					</p>
+					<p>
+						L’idea non e di fingere una perfezione bilingue. E piuttosto un modo per lasciare
+						entraree un po’ di italiano nel sito, soprattutto dove si intreccia con famiglia,
+						memoria e curiosita personale.
+					</p>
+
+					<div class="locale-page__grid" aria-label="Pagine italiane">
+						<a class="locale-page__card" href="/it/about">
+							<h2>Chi sono</h2>
+							<p>Una breve introduzione, con interessi e riferimenti principali.</p>
+						</a>
+						<a class="locale-page__card" href="/it/hello">
+							<h2>Ciao</h2>
+							<p>Una pagina semplice per contattarmi e orientarsi nel sito.</p>
+						</a>
+						<a class="locale-page__card" href="/it/colophon">
+							<h2>Colophon</h2>
+							<p>Note su come e costruito il sito e su quali strumenti lo sostengono.</p>
+						</a>
+						<a class="locale-page__card" href="/it/subscribe">
+							<h2>Iscriviti</h2>
+							<p>Feed, email e modi semplici per seguire il sito.</p>
+						</a>
+					</div>
+
+					<p class="locale-page__note">
+						Per il resto del sito puoi passare liberamente all’inglese dal footer.
+					</p>
+				</section>
+			</div>
+		</div>
+	</section>
+</Base>
+
+<style>
+	.locale-page__body {
+		display: grid;
+		gap: 1.25rem;
+	}
+
+	.locale-page__body p {
+		margin: 0;
+	}
+
+	.locale-page__grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+		gap: 1rem;
+		margin-top: 0.5rem;
+	}
+
+	.locale-page__card {
+		display: grid;
+		gap: 0.4rem;
+		padding: 1rem 1.05rem;
+		border: 1px solid var(--border);
+		border-radius: 0.85rem;
+		background: color-mix(in srgb, var(--surface) 74%, transparent);
+		text-decoration: none;
+		color: inherit;
+	}
+
+	.locale-page__card h2,
+	.locale-page__card p,
+	.locale-page__note {
+		margin: 0;
+	}
+
+	.locale-page__card h2 {
+		font-size: 1rem;
+	}
+
+	.locale-page__note {
+		color: var(--muted);
+		font-size: 0.94rem;
+	}
+</style>

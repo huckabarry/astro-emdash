@@ -1,8 +1,15 @@
 ---
-import { getTerm, getEmDashCollection, getEntryTerms } from "emdash";
+import { getTerm, getEmDashCollection } from "emdash";
 import Base from "../../layouts/Base.astro";
 import PostCard from "../../components/PostCard.astro";
 import { getReadingTime } from "../../utils/reading-time";
+import {
+	PUBLIC_ARCHIVE_CACHE_CONTROL,
+	fallbackTagLabel,
+	getPostTagSlugs,
+} from "../../lib/emdash-content";
+
+Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
 
 const { slug } = Astro.params;
 const term = slug ? await getTerm("category", slug) : null;
@@ -11,25 +18,37 @@ if (!term) {
 	return Astro.redirect("/404");
 }
 
-const { entries: posts } = await getEmDashCollection("posts", {
+const { entries: posts, cacheHint } = await getEmDashCollection("posts", {
+	status: "published",
 	where: { category: term.slug },
 	orderBy: { published_at: "desc" },
 });
 
-// Fetch tags for display on each post card
-const filteredPosts = await Promise.all(
-	posts.map(async (post) => {
-		const tags = await getEntryTerms("posts", post.data.id, "tag");
-		return { post, tags };
-	})
+Astro.cache.set(cacheHint);
+
+const uniqueTagSlugs = [...new Set(posts.flatMap((post) => getPostTagSlugs(post)))];
+const tagEntries = await Promise.all(
+	uniqueTagSlugs.map(async (tagSlug) => [tagSlug, await getTerm("tag", tagSlug)] as const),
 );
+const tagMap = new Map(
+	tagEntries.map(([tagSlug, entry]) => [
+		tagSlug,
+		{ slug: tagSlug, label: entry?.label || fallbackTagLabel(tagSlug) },
+	]),
+);
+const filteredPosts = posts.map((post) => ({
+	post,
+	tags: getPostTagSlugs(post).map(
+		(tagSlug) => tagMap.get(tagSlug) ?? { slug: tagSlug, label: fallbackTagLabel(tagSlug) },
+	),
+}));
 ---
 
 <Base title={`${term.label} posts`} description={`All posts in ${term.label}`}>
 	<section class="archive-section">
 		<header class="archive-header">
 			<span class="archive-label">Category</span>
-			<h1 class="archive-title">{term.label}</h1>
+			<h1 class="section-title">{term.label}</h1>
 			<p class="archive-count">
 				{filteredPosts.length}
 				{filteredPosts.length === 1 ? "post" : "posts"}
@@ -60,43 +79,40 @@ const filteredPosts = await Promise.all(
 
 <style>
 	.archive-section {
-		max-width: var(--wide-width);
+		max-width: var(--content-width);
 		margin: 0 auto;
-		padding: var(--spacing-12) var(--spacing-6);
+		padding: 0 0 var(--spacing-8);
 	}
 
 	.archive-header {
-		margin-bottom: var(--spacing-12);
-		padding-bottom: var(--spacing-8);
-		border-bottom: 1px solid var(--color-border-subtle);
+		margin-bottom: var(--spacing-6);
+		padding-bottom: var(--spacing-5);
+		border-bottom: 1px solid var(--color-border);
 	}
 
 	.archive-label {
 		display: block;
-		font-size: var(--font-size-xs);
+		font-size: 0.76rem;
 		font-weight: 500;
 		color: var(--color-accent);
+		font-family: var(--font-mono);
+		font-style: italic;
 		text-transform: uppercase;
 		letter-spacing: var(--tracking-wider);
 		margin-bottom: var(--spacing-2);
 	}
 
-	.archive-title {
-		font-size: var(--font-size-4xl);
-		font-weight: 700;
-		letter-spacing: var(--tracking-tight);
-		margin-bottom: var(--spacing-2);
-	}
-
 	.archive-count {
-		font-size: var(--font-size-sm);
+		font-size: 0.92rem;
+		font-family: var(--font-mono);
+		font-style: italic;
 		color: var(--color-muted);
 	}
 
 	.posts-grid {
 		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: var(--spacing-12) var(--spacing-8);
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--spacing-6);
 	}
 
 	.no-posts {

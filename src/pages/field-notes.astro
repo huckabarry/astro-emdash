@@ -1,0 +1,45 @@
+---
+import { getEmDashCollection } from "emdash";
+import Base from "../layouts/Base.astro";
+import { getImageUrl, formatDisplayDate } from "../lib/afterword";
+import { PUBLIC_ARCHIVE_CACHE_CONTROL } from "../lib/emdash-content";
+
+Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
+
+const { entries: posts, cacheHint } = await getEmDashCollection("posts", {
+	status: "published",
+	where: { tag: "field-notes" },
+	orderBy: { published_at: "desc" },
+	limit: 24,
+});
+
+Astro.cache.set(cacheHint);
+---
+
+<Base title="Field Notes" description="Personal, place-based writing and quieter observations.">
+	<section class="stream-head">
+		<h1 class="stream-head__title">Field Notes</h1>
+		<p class="stream-head__lede">Personal, place-based writing and quieter observations.</p>
+	</section>
+
+	<section class="blog-list blog-list--archive" aria-label="Field notes">
+		{posts.map((post) => {
+			const coverImage = getImageUrl(post.data.featured_image, Astro.url.origin);
+			return (
+				<article class:list={["blog-row", coverImage && "blog-row--with-image"]}>
+					<a class="blog-row__link" href={`/posts/${post.id}`}>
+						{coverImage && <img class="blog-row__image" src={coverImage} alt={post.data.title} loading="lazy" />}
+						<div class="blog-row__body">
+							<time class="blog-row__date" datetime={post.data.publishedAt?.toISOString()}>
+								{formatDisplayDate(post.data.publishedAt ?? undefined)}
+							</time>
+							<h2>{post.data.title}</h2>
+							<p>{post.data.excerpt}</p>
+							<span class="blog-row__read-more">Read more <span aria-hidden="true">→</span></span>
+						</div>
+					</a>
+				</article>
+			);
+		})}
+	</section>
+</Base>

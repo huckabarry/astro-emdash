@@ -8,6 +8,9 @@
 	],
 	"vars": {
 		"ATPROTO_REPO": "did:plc:vt4k6d3e5rjw65cuzaf3nufq",
+		"MAILGUN_DOMAIN": "mg.afterword.blog",
+		"MAILGUN_FROM_EMAIL": "postmaster@mg.afterword.blog",
+		"STANDARD_SITE_PUBLICATION_URI": "at://did:plc:vt4k6d3e5rjw65cuzaf3nufq/site.standard.publication/3mk5ifnbo552g",
 		"STANDARD_SITE_IDENTIFIER": "afterword.blog",
 		"STANDARD_SITE_PDS_URL": "https://eurosky.social"
 	},
@@ -26,6 +29,11 @@
 			"binding": "MEDIA",
 			"bucket_name": "afterword-emdash-lab",
 			"preview_bucket_name": "afterword-emdash-lab"
+		},
+		{
+			"binding": "LEGACY_MEDIA",
+			"bucket_name": "afterword",
+			"preview_bucket_name": "afterword"
 		},
 	],
 	"observability": {

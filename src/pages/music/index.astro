@@ -1,0 +1,26 @@
+---
+import Base from "../../layouts/Base.astro";
+import { getAlbums } from "../../lib/media";
+
+const albums = await getAlbums();
+---
+
+<Base title="Music" description="Albums from the listening rotation.">
+	<section class="stream-head">
+		<h1 class="stream-head__title">Music</h1>
+		<p class="stream-head__lede">Albums from the listening rotation.</p>
+	</section>
+
+	<section class="blog-list blog-list--archive" aria-label="Albums">
+		{albums.map((album) => (
+			<article class="blog-row">
+				<a class="blog-row__link" href={album.localPath}>
+					<time class="blog-row__date" datetime={album.publishedAt.toISOString()}>{album.displayDate}</time>
+					<h2>{album.albumTitle}</h2>
+					<p>{album.artist}</p>
+					<span class="blog-row__read-more">Open album <span aria-hidden="true">→</span></span>
+				</a>
+			</article>
+		))}
+	</section>
+</Base>

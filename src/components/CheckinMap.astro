@@ -1,0 +1,118 @@
+---
+import "leaflet/dist/leaflet.css";
+
+interface Props {
+	latitude: number;
+	longitude: number;
+	name: string;
+	compact?: boolean;
+	variant?: "default" | "preview";
+}
+
+const {
+	latitude,
+	longitude,
+	name,
+	compact = false,
+	variant = "default",
+} = Astro.props;
+---
+
+<div
+	class:list={[
+		"checkin-map__frame",
+		"checkin-map__frame--leaflet",
+		compact && "checkin-map__frame--compact",
+	]}
+	data-checkin-map
+	data-latitude={latitude}
+	data-longitude={longitude}
+	data-name={name}
+	data-compact={compact ? "true" : "false"}
+	data-variant={variant}
+	aria-label={`Map showing ${name}`}
+></div>
+
+<script>
+	async function bootCheckinMap(element) {
+		if (!(element instanceof HTMLElement) || element.dataset.mapReady === "true") {
+			return;
+		}
+
+		const latitude = Number.parseFloat(element.dataset.latitude || "");
+		const longitude = Number.parseFloat(element.dataset.longitude || "");
+		const name = element.dataset.name || "Check-in";
+		const compact = element.dataset.compact === "true";
+		const variant = element.dataset.variant || "default";
+
+		if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+			return;
+		}
+
+		const { default: leaflet } = await import("leaflet");
+		const isPreview = variant === "preview";
+		const tileUrl = isPreview
+			? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+			: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+
+		const map = leaflet.map(element, {
+			scrollWheelZoom: false,
+			zoomControl: !compact && !isPreview,
+			dragging: !compact && !isPreview,
+			touchZoom: !compact && !isPreview,
+			doubleClickZoom: !compact && !isPreview,
+			boxZoom: !compact && !isPreview,
+			keyboard: !compact && !isPreview,
+			attributionControl: !compact && !isPreview,
+			tapHold: !compact && !isPreview,
+			zoomAnimation: !compact,
+			fadeAnimation: !compact,
+			markerZoomAnimation: !compact,
+		}).setView([latitude, longitude], compact ? 15 : 16);
+
+		leaflet
+			.tileLayer(tileUrl, {
+				attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+				maxZoom: 19,
+			})
+			.addTo(map);
+
+		const marker = leaflet
+			.marker([latitude, longitude], {
+				icon: leaflet.divIcon({
+					className: "afterword-map-pin-wrapper",
+					html: '<span class="afterword-map-pin"></span>',
+					iconSize: [24, 24],
+					iconAnchor: [12, 24],
+					popupAnchor: [0, -20],
+				}),
+			})
+			.addTo(map);
+
+		if (!isPreview) {
+			marker.bindTooltip(name, {
+				direction: "top",
+				permanent: false,
+			});
+		}
+
+		const refreshSize = () => {
+			requestAnimationFrame(() => map.invalidateSize(false));
+		};
+
+		refreshSize();
+		window.setTimeout(refreshSize, 120);
+		window.setTimeout(refreshSize, 320);
+
+		if (typeof ResizeObserver !== "undefined") {
+			const observer = new ResizeObserver(() => refreshSize());
+			observer.observe(element);
+		}
+
+		element.dataset.mapReady = "true";
+	}
+
+	document.querySelectorAll("[data-checkin-map]").forEach((element) => {
+		void bootCheckinMap(element);
+	});
+</script>

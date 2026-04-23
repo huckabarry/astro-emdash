@@ -1,0 +1,138 @@
+---
+import type { PopfeedItem } from "../lib/media";
+
+interface Props {
+	item: PopfeedItem;
+	previousItem: PopfeedItem | null;
+	nextItem: PopfeedItem | null;
+	backHref: string;
+	backLabel: string;
+}
+
+const { item, previousItem, nextItem, backHref, backLabel } = Astro.props;
+---
+
+<article class={`entry entry--media h-entry ${item.type === "book" ? "entry--media-text" : ""}`}>
+	<div class="entry__meta">
+		<a href={backHref}>{backLabel}</a>
+		{item.listTypeLabel ? <span>{item.listTypeLabel}</span> : null}
+		<time datetime={item.date.toISOString()}>{item.displayDate}</time>
+	</div>
+
+	<div class={`media-entry ${item.type === "book" ? "media-entry--text-only" : ""}`}>
+		{item.type !== "book" && item.posterImage ? (
+			<figure class="media-entry__cover">
+				<img src={item.posterImage} alt={item.title} />
+			</figure>
+		) : null}
+
+		<div class="media-entry__body">
+			<h1 class="entry__title p-name">{item.title}</h1>
+
+			{item.mainCredit ? <p class="media-entry__credit">{item.mainCredit}</p> : null}
+
+			<dl class="media-entry__details">
+				{item.listTypeLabel ? (
+					<div>
+						<dt>Status</dt>
+						<dd>{item.listTypeLabel}</dd>
+					</div>
+				) : null}
+
+				{item.mainCreditRole ? (
+					<div>
+						<dt>Credit</dt>
+						<dd>{item.mainCreditRole}</dd>
+					</div>
+				) : null}
+
+				{item.activityAt ? (
+					<div>
+						<dt>{item.activityDateLabel}</dt>
+						<dd><time datetime={item.activityAt.toISOString()}>{item.activityDisplayDate || item.displayDate}</time></dd>
+					</div>
+				) : null}
+
+				{item.addedAt && item.activityAt && item.addedAt.getTime() !== item.activityAt.getTime() ? (
+					<div>
+						<dt>Added</dt>
+						<dd>
+							<time datetime={item.addedAt.toISOString()}>
+								{item.addedAt.toLocaleDateString("en-GB", {
+									day: "2-digit",
+									month: "short",
+									year: "numeric",
+								})}
+							</time>
+						</dd>
+					</div>
+				) : null}
+
+				{item.releaseDate ? (
+					<div>
+						<dt>Released</dt>
+						<dd>
+							{item.releaseDate.toLocaleDateString("en-GB", {
+								day: "2-digit",
+								month: "short",
+								year: "numeric",
+							})}
+						</dd>
+					</div>
+				) : null}
+
+				{item.listName ? (
+					<div>
+						<dt>Source List</dt>
+						<dd>{item.listName}</dd>
+					</div>
+				) : null}
+
+				{item.genres.length ? (
+					<div>
+						<dt>Genres</dt>
+						<dd>{item.genres.join(", ")}</dd>
+					</div>
+				) : null}
+			</dl>
+
+			{item.links.length ? (
+				<div class="media-entry__links">
+					<h2 class="media-entry__links-title">Links</h2>
+					<ul class="media-entry__links-list">
+						{item.links.map((link) => (
+							<li><a href={link.url} target="_blank" rel="noreferrer">{link.label}</a></li>
+						))}
+					</ul>
+				</div>
+			) : null}
+		</div>
+	</div>
+
+	<footer class="post-actions" aria-label="Post actions">
+		<a class="post-action-link" href={backHref}>Back to all {backLabel.toLowerCase()}</a>
+	</footer>
+
+	{previousItem || nextItem ? (
+		<nav class="post-navigation">
+			<ul>
+				<li class="post-navigation-item post-navigation-item-previous">
+					{previousItem ? (
+						<a class="post-navigation-link" href={previousItem.localPath}>
+							<span class="post-navigation-label">← Previous</span>
+							<span class="post-navigation-title">{previousItem.title}</span>
+						</a>
+					) : null}
+				</li>
+				<li class="post-navigation-item post-navigation-item-next">
+					{nextItem ? (
+						<a class="post-navigation-link" href={nextItem.localPath}>
+							<span class="post-navigation-label">Next →</span>
+							<span class="post-navigation-title">{nextItem.title}</span>
+						</a>
+					) : null}
+				</li>
+			</ul>
+		</nav>
+	) : null}
+</article>

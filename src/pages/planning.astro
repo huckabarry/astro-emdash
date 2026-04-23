@@ -1,0 +1,61 @@
+---
+import { getEmDashCollection } from "emdash";
+import Base from "../layouts/Base.astro";
+import { getImageUrl, formatDisplayDate } from "../lib/afterword";
+import {
+	PUBLIC_ARCHIVE_CACHE_CONTROL,
+	PLANNING_TAG_SLUGS,
+	dedupeEntriesById,
+	getPostStringField,
+	sortEntriesByPublishedAtDesc,
+} from "../lib/emdash-content";
+
+Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
+
+const planningResults = await Promise.all(
+	PLANNING_TAG_SLUGS.map((tag) =>
+		getEmDashCollection("posts", {
+			status: "published",
+			where: { tag },
+			orderBy: { published_at: "desc" },
+			limit: 20,
+		}),
+	),
+);
+
+planningResults.forEach((result) => Astro.cache.set(result.cacheHint));
+
+const planningPosts = sortEntriesByPublishedAtDesc(
+	dedupeEntriesById(planningResults.flatMap((result) => result.entries)),
+).filter(
+	(post) => getPostStringField(post, "source_type") !== "earlier-web",
+);
+---
+
+<Base title="Planning & Urbanism" description="Professional perspectives on city planning and urban issues.">
+	<section class="stream-head">
+		<h1 class="stream-head__title">Planning & Urbanism</h1>
+		<p class="stream-head__lede">Professional perspectives on city planning and urban issues.</p>
+	</section>
+
+	<section class="blog-list blog-list--archive" aria-label="Planning and urbanism posts">
+		{planningPosts.map((post) => {
+			const coverImage = getImageUrl(post.data.featured_image, Astro.url.origin);
+			return (
+				<article class:list={["blog-row", coverImage && "blog-row--with-image"]}>
+					<a class="blog-row__link" href={`/posts/${post.id}`}>
+						{coverImage && <img class="blog-row__image" src={coverImage} alt={post.data.title} loading="lazy" />}
+						<div class="blog-row__body">
+							<time class="blog-row__date" datetime={post.data.publishedAt?.toISOString()}>
+								{formatDisplayDate(post.data.publishedAt ?? undefined)}
+							</time>
+							<h2>{post.data.title}</h2>
+							<p>{post.data.excerpt}</p>
+							<span class="blog-row__read-more">Read more <span aria-hidden="true">→</span></span>
+						</div>
+					</a>
+				</article>
+			);
+		})}
+	</section>
+</Base>

@@ -1,0 +1,404 @@
+---
+import { getEmDashCollection } from "emdash";
+import Base from "../layouts/Base.astro";
+import { formatDisplayDate, getImageUrl } from "../lib/afterword";
+import {
+	dedupeEntriesById,
+	getPostStringField,
+	sortEntriesByPublishedAtDesc,
+} from "../lib/emdash-content";
+
+Astro.response.headers.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
+
+const [nowResult, galleryResults, fallbackResult] = await Promise.all([
+	getEmDashCollection("posts", {
+		status: "published",
+		where: { tag: "now" },
+		orderBy: { published_at: "desc" },
+		limit: 12,
+	}),
+	Promise.all(
+		["gallery", "photography"].map((tag) =>
+			getEmDashCollection("posts", {
+				status: "published",
+				where: { tag },
+				orderBy: { published_at: "desc" },
+				limit: 2,
+			}),
+		),
+	),
+	getEmDashCollection("posts", {
+		status: "published",
+		orderBy: { published_at: "desc" },
+		limit: 24,
+	}),
+]);
+
+Astro.cache.set(nowResult.cacheHint);
+galleryResults.forEach((result) => Astro.cache.set(result.cacheHint));
+Astro.cache.set(fallbackResult.cacheHint);
+
+const fallbackPosts = fallbackResult.entries.filter(
+	(post) => getPostStringField(post, "source_type") !== "earlier-web",
+);
+const visiblePosts = (nowResult.entries.length ? nowResult.entries : fallbackPosts).slice(0, 12);
+const latestPhoto =
+	sortEntriesByPublishedAtDesc(
+		dedupeEntriesById(galleryResults.flatMap((result) => result.entries)),
+	)[0] ?? null;
+const latestPhotoImage = latestPhoto ? getImageUrl(latestPhoto.data.featured_image, Astro.url.origin) : null;
+const latestPhotoAlt = latestPhoto?.data.title ?? "Latest photo";
+---
+
+<Base title="Now" description="A snapshot of what currently has Bryan's attention.">
+	<section class="section-block">
+		<h1 class="section-title">Now</h1>
+		<article class="content content-page">
+			<div class="post-full-content">
+				<section class="content-body">
+					<p>A snapshot of what currently has my attention.</p>
+				</section>
+			</div>
+		</article>
+	</section>
+
+	<section class="section-block">
+		<h2 class="section-title">Life Lately</h2>
+
+		{visiblePosts.length ? (
+			<div class="now-post-list">
+				{visiblePosts.map((post) => (
+					<a class="now-post-row" href={`/now/${post.id}`}>
+						<time class="now-post-row__date" datetime={post.data.publishedAt?.toISOString()}>
+							{formatDisplayDate(post.data.publishedAt ?? undefined)}
+						</time>
+						<h3 class="now-post-row__title">{post.data.title}</h3>
+					</a>
+				))}
+			</div>
+		) : (
+			<p class="page-head__lede">No now posts are available yet.</p>
+		)}
+	</section>
+
+	<section class="section-block">
+		<h2 class="section-title">Signals</h2>
+		<div class="now-glance" data-now-glance>
+			{latestPhoto && latestPhotoImage ? (
+				<article class="now-card">
+					<p class="now-card__kicker">Latest Photo</p>
+					<div class="now-card__copy">
+						<div class="now-card__meta">
+							<time datetime={latestPhoto.data.publishedAt?.toISOString()}>
+								{formatDisplayDate(latestPhoto.data.publishedAt ?? undefined)}
+							</time>
+						</div>
+						<h2 class="now-card__title">
+							<a href={`/posts/${latestPhoto.id}`}>{latestPhoto.data.title}</a>
+						</h2>
+						<p class="now-card__subhead">Gallery</p>
+					</div>
+
+					<a class="now-photo now-photo--artwork" href={`/posts/${latestPhoto.id}`}>
+						<img class="now-photo__image" src={latestPhotoImage} alt={latestPhotoAlt} loading="lazy" />
+					</a>
+
+					<div class="now-card__actions">
+						<a class="tag-pill now-card__action" href={`/posts/${latestPhoto.id}`}>View post</a>
+						<a class="tag-pill now-card__action" href="/gallery">Gallery</a>
+					</div>
+				</article>
+			) : null}
+		</div>
+	</section>
+</Base>
+
+<script>
+	const glance = document.querySelector("[data-now-glance]");
+
+	function escapeHtml(value) {
+		return String(value || "")
+			.replaceAll("&", "&amp;")
+			.replaceAll("<", "&lt;")
+			.replaceAll(">", "&gt;")
+			.replaceAll('"', "&quot;")
+			.replaceAll("'", "&#39;");
+	}
+
+	function formatLongDate(value) {
+		return new Date(value).toLocaleDateString("en-US", {
+			year: "numeric",
+			month: "long",
+			day: "numeric",
+		});
+	}
+
+	function formatShortDate(value) {
+		return new Date(value).toLocaleDateString("en-US", {
+			year: "numeric",
+			month: "short",
+			day: "numeric",
+		});
+	}
+
+	function excerpt(value, maxLength = 180) {
+		const normalized = String(value || "").trim().replace(/\s+/g, " ");
+		if (!normalized || normalized.length <= maxLength) return normalized;
+		return `${normalized.slice(0, maxLength).trimEnd()}…`;
+	}
+
+	function renderLatestTrack(track) {
+		if (!track) return "";
+
+		return `
+			<article class="now-card">
+				<p class="now-card__kicker">Latest Track</p>
+				<div class="now-card__copy">
+					<div class="now-card__meta">
+						<time datetime="${escapeHtml(track.dateIso)}">${escapeHtml(track.dateLabel)}</time>
+					</div>
+					<h2 class="now-card__title">
+						<a href="${escapeHtml(track.href)}">${escapeHtml(track.title)}</a>
+					</h2>
+					${track.artist ? `<p class="now-card__subhead">${escapeHtml(track.artist)}</p>` : '<p class="now-card__subhead now-card__subhead--ghost" aria-hidden="true">&nbsp;</p>'}
+				</div>
+				${track.imageUrl ? `<a class="now-photo now-photo--artwork" href="${escapeHtml(track.href)}"><img class="now-photo__image" src="${escapeHtml(track.imageUrl)}" alt="${escapeHtml(track.imageAlt || track.title)}" loading="lazy" decoding="async" /></a>` : ""}
+				${track.summary ? `<p class="now-card__text">${escapeHtml(excerpt(track.summary, 180))}</p>` : ""}
+				<div class="now-card__actions">
+					<a class="tag-pill now-card__action" href="${escapeHtml(track.href)}">View track</a>
+					<a class="tag-pill now-card__action" href="/media">Media</a>
+				</div>
+			</article>
+		`;
+	}
+
+	function renderLatestCheckin(checkin) {
+		if (!checkin) return "";
+
+		return `
+			<article class="now-card">
+				<p class="now-card__kicker">Latest Check-In</p>
+				<div class="now-card__copy">
+					<div class="now-card__meta">
+						<time datetime="${escapeHtml(checkin.visitedAt)}">${escapeHtml(formatShortDate(checkin.visitedAt))}</time>
+					</div>
+					<h2 class="now-card__title">
+						<a href="${escapeHtml(checkin.canonicalPath || "/check-ins")}">${escapeHtml(checkin.name)}</a>
+					</h2>
+					${checkin.venueCategory ? `<p class="now-card__subhead">${escapeHtml(checkin.venueCategory)}</p>` : '<p class="now-card__subhead now-card__subhead--ghost" aria-hidden="true">&nbsp;</p>'}
+				</div>
+				${checkin.mapPreviewPath ? `<div class="now-card__map"><img class="now-card__map-image" src="${escapeHtml(checkin.mapPreviewPath)}" alt="Map preview for ${escapeHtml(checkin.name)}" loading="lazy" decoding="async" width="640" height="400" /></div>` : ""}
+				${checkin.excerpt || checkin.note ? `<p class="now-card__text">${escapeHtml(excerpt(checkin.excerpt || checkin.note, 180))}</p>` : ""}
+				<div class="now-card__actions">
+					<a class="tag-pill now-card__action" href="${escapeHtml(checkin.canonicalPath || "/check-ins")}">View check-in</a>
+					<a class="tag-pill now-card__action" href="/check-ins">All check-ins</a>
+				</div>
+			</article>
+		`;
+	}
+
+	function renderOnThisDay(post) {
+		if (!post) return "";
+
+		const title = post.title || (post.publishedAt ? `A note from ${new Date(post.publishedAt).getFullYear()}` : "");
+		const summary = post.excerpt ? excerpt(post.excerpt, 180) : "";
+
+		return `
+			<article class="now-card">
+				<p class="now-card__kicker">On This Date</p>
+				<div class="now-card__copy">
+					<div class="now-card__meta">
+						<time datetime="${escapeHtml(post.publishedAt)}">${escapeHtml(formatLongDate(post.publishedAt))}</time>
+					</div>
+					<h2 class="now-card__title">
+						<a href="${escapeHtml(post.path)}">${escapeHtml(title)}</a>
+					</h2>
+					<p class="now-card__subhead">Earlier Web</p>
+				</div>
+				${post.coverImage ? `<a class="now-photo now-photo--artwork" href="${escapeHtml(post.path)}"><img class="now-photo__image" src="${escapeHtml(post.coverImage)}" alt="${escapeHtml(title)}" loading="lazy" decoding="async" /></a>` : ""}
+				${summary ? `<p class="now-card__text"><a class="now-card__text-link" href="${escapeHtml(post.path)}">${escapeHtml(summary)}</a></p>` : ""}
+				<div class="now-card__actions">
+					<a class="tag-pill now-card__action" href="${escapeHtml(post.path)}">View post</a>
+					<a class="tag-pill now-card__action" href="/earlier-web">Earlier Web</a>
+				</div>
+			</article>
+		`;
+	}
+
+	if (glance instanceof HTMLElement) {
+		const cidAttrName = (() => {
+			const sample = glance.querySelector("article") || glance;
+			for (const attr of Array.from(sample.attributes)) {
+				if (attr.name.startsWith("data-astro-cid-")) return attr.name;
+			}
+			return null;
+		})();
+
+		fetch("/api/now-signals.json", { headers: { accept: "application/json" } })
+			.then((response) => (response.ok ? response.json() : null))
+			.then((payload) => {
+				if (!payload) return;
+
+				const html = [
+					renderLatestTrack(payload.latestTrack),
+					renderLatestCheckin(payload.latestCheckin),
+					renderOnThisDay(payload.onThisDayPost),
+				]
+					.filter(Boolean)
+					.join("");
+
+				if (html) {
+					const template = document.createElement("template");
+					template.innerHTML = html;
+					if (cidAttrName) {
+						for (const node of Array.from(template.content.querySelectorAll("*"))) {
+							if (node instanceof Element) node.setAttribute(cidAttrName, "");
+						}
+					}
+					glance.prepend(template.content);
+				}
+			})
+			.catch(() => {
+				// Ignore signal fetch failures; the page body is already rendered.
+			});
+	}
+</script>
+
+<style>
+	.now-glance {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 1rem;
+	}
+
+	.now-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+		padding: 1rem;
+		border: 1px solid var(--border);
+		border-radius: 1rem;
+		background: color-mix(in srgb, var(--surface) 76%, transparent 24%);
+	}
+
+	.now-card__kicker {
+		margin: 0;
+		color: var(--accent);
+		font-size: 0.76rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.now-card__copy {
+		display: grid;
+		gap: 0.35rem;
+		align-content: start;
+	}
+
+	.now-card__meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem 0.75rem;
+		color: var(--muted);
+		font-size: 0.82rem;
+		line-height: 1.4;
+	}
+
+	.now-card__title {
+		margin: 0;
+		font-size: clamp(1.2rem, 2vw, 1.45rem);
+		line-height: 1.14;
+	}
+
+	.now-card__title a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.now-card__subhead,
+	.now-card__text {
+		margin: 0;
+		color: var(--muted);
+	}
+
+	.now-card__subhead {
+		font-size: 0.88rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		min-height: 1.1rem;
+	}
+
+	.now-card__subhead--ghost {
+		visibility: hidden;
+	}
+
+	.now-card__text {
+		font-size: 0.97rem;
+		line-height: 1.6;
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 4;
+		line-clamp: 4;
+		overflow: hidden;
+	}
+
+	.now-card__text-link {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.now-card__map {
+		display: block;
+		overflow: hidden;
+		border-radius: 0.85rem;
+		aspect-ratio: 1 / 1;
+	}
+
+	.now-card__map-image {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		background: color-mix(in srgb, var(--surface) 82%, white 18%);
+	}
+
+	.now-photo {
+		display: block;
+		text-decoration: none;
+		aspect-ratio: 16 / 10;
+		overflow: hidden;
+		border-radius: 0.85rem;
+	}
+
+	.now-photo--artwork {
+		aspect-ratio: 1 / 1;
+	}
+
+	.now-photo__image {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		background: color-mix(in srgb, var(--surface) 82%, white 18%);
+	}
+
+	.now-card__actions {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.5rem;
+		margin-top: auto;
+	}
+
+	.now-card__action {
+		text-decoration: none;
+		justify-content: center;
+		text-align: center;
+	}
+
+	@media (max-width: 760px) {
+		.now-glance {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

@@ -1,0 +1,26 @@
+---
+import Base from "../../layouts/Base.astro";
+import { getTracks } from "../../lib/media";
+
+const tracks = await getTracks();
+---
+
+<Base title="Listening Now" description="Track notes from Crucial Tracks.">
+	<section class="stream-head">
+		<h1 class="stream-head__title">Listening Now</h1>
+		<p class="stream-head__lede">Track notes from Crucial Tracks.</p>
+	</section>
+
+	<section class="blog-list blog-list--archive" aria-label="Tracks">
+		{tracks.map((track) => (
+			<article class="blog-row">
+				<a class="blog-row__link" href={track.localPath}>
+					<time class="blog-row__date" datetime={track.publishedAt.toISOString()}>{track.displayDate}</time>
+					<h2>{track.trackTitle}</h2>
+					<p>{track.artist}</p>
+					<span class="blog-row__read-more">Open track <span aria-hidden="true">→</span></span>
+				</a>
+			</article>
+		))}
+	</section>
+</Base>

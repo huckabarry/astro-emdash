@@ -1,0 +1,85 @@
+---
+import Base from "../../layouts/Base.astro";
+import { getAlbumBySlug, getAlbums } from "../../lib/media";
+
+const slug = Astro.params.slug || "";
+const [album, albums] = await Promise.all([getAlbumBySlug(slug), getAlbums()]);
+
+if (!album) {
+	return Astro.redirect("/404");
+}
+
+const index = albums.findIndex((item) => item.slug === album.slug);
+const previousAlbum = index >= 0 ? albums[index + 1] || null : null;
+const nextAlbum = index > 0 ? albums[index - 1] || null : null;
+---
+
+<Base title={`${album.albumTitle} | Music`} description={album.note || album.excerpt}>
+	<article class="entry entry--media">
+		<div class="entry__meta">
+			<a href="/music">Music</a>
+			<time>{album.displayDate}</time>
+		</div>
+		<div class="media-entry">
+			{album.coverImage ? (
+				<figure class="media-entry__cover">
+					<img src={album.coverImage} alt={album.albumTitle} />
+				</figure>
+			) : null}
+			<div class="media-entry__body">
+				<h1 class="entry__title">{album.albumTitle}</h1>
+				{album.artist ? <p class="media-entry__credit">{album.artist}</p> : null}
+				<div class="media-entry__note entry__content" set:html={album.noteHtml || `<p>${album.note}</p>`}></div>
+				<dl class="media-entry__details">
+					<div>
+						<dt>Added</dt>
+						<dd>{album.displayDate}</dd>
+					</div>
+					{album.sourceUrl ? (
+						<div>
+							<dt>Source</dt>
+							<dd><a href={album.sourceUrl} target="_blank" rel="noreferrer">View on Album Whale</a></dd>
+						</div>
+					) : null}
+				</dl>
+				{album.listenLinks.length ? (
+					<div class="media-entry__links">
+						<h2 class="media-entry__links-title">Listen</h2>
+						<ul class="media-entry__links-list">
+							{album.listenLinks.map((link) => (
+								<li><a href={link.url} target="_blank" rel="noreferrer">{link.label}</a></li>
+							))}
+						</ul>
+					</div>
+				) : null}
+			</div>
+		</div>
+
+		<footer class="post-actions" aria-label="Post actions">
+			<a class="post-action-link" href="/music">Back to all albums</a>
+		</footer>
+
+		{previousAlbum || nextAlbum ? (
+			<nav class="post-navigation">
+				<ul>
+					<li class="post-navigation-item post-navigation-item-previous">
+						{previousAlbum ? (
+							<a class="post-navigation-link" href={previousAlbum.localPath}>
+								<span class="post-navigation-label">← Previous</span>
+								<span class="post-navigation-title">{previousAlbum.albumTitle}</span>
+							</a>
+						) : null}
+					</li>
+					<li class="post-navigation-item post-navigation-item-next">
+						{nextAlbum ? (
+							<a class="post-navigation-link" href={nextAlbum.localPath}>
+								<span class="post-navigation-label">Next →</span>
+								<span class="post-navigation-title">{nextAlbum.albumTitle}</span>
+							</a>
+						) : null}
+					</li>
+				</ul>
+			</nav>
+		) : null}
+	</article>
+</Base>

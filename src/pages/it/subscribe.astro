@@ -1,0 +1,203 @@
+---
+import Base from "../../layouts/Base.astro";
+
+const feeds = [
+	{
+		title: "Tutto",
+		description: "Il flusso pubblico completo di Afterword: scritti, aggiornamenti, media, check-in e archivio.",
+		rssUrl: "/everything/feed.xml",
+		jsonUrl: "/everything/feed.json",
+	},
+	{
+		title: "Scritti",
+		description: "Field notes, planning posts e altri testi piu lunghi da Afterword.",
+		rssUrl: "/feed.xml",
+		jsonUrl: "/feed.json",
+	},
+	{
+		title: "Planning",
+		description: "Solo i post su pianificazione e urbanistica.",
+		rssUrl: "/planning/feed.xml",
+		jsonUrl: "/planning/feed.json",
+	},
+	{
+		title: "Stato",
+		description: "Aggiornamenti brevi pubblicati da Bluesky sul sito.",
+		rssUrl: "/status/feed.xml",
+		jsonUrl: "/status/feed-public.json",
+	},
+	{
+		title: "Media",
+		description: "Album, brani, libri, film e serie dalla timeline media.",
+		rssUrl: "/media/feed.xml",
+		jsonUrl: "/media/feed.json",
+	},
+];
+---
+
+<Base
+	title="Iscriviti"
+	description="Iscriviti ad Afterword via email, RSS o feed JSON, con opzioni per scritti, planning, status, media e il flusso pubblico completo."
+>
+	<script
+		defer
+		src="https://cdn.jsdelivr.net/ghost/portal@~2.67/umd/portal.min.js"
+		data-i18n="true"
+		data-ghost="https://lowvelocity.org/"
+		data-key="531a03d1af5b6e4749d8189195"
+		data-api="https://lowvelocity.org/ghost/api/content/"
+		data-locale="it"
+		crossorigin="anonymous"
+	></script>
+
+	<section class="section-block">
+		<h1 class="section-title">Iscriviti</h1>
+		<article class="content content-page">
+			<div class="post-full-content">
+				<section class="content-body subscribe-page">
+					<section class="subscribe-planning">
+						<h2>Aggiornamenti via email</h2>
+						<p>Se preferisci ricevere i nuovi post via email, puoi iscriverti qui:</p>
+						<div class="subscribe-embed">
+							<form data-members-form="subscribe" class="ghost-newsletter-form">
+								<input
+									data-members-email
+									type="email"
+									required
+									placeholder="Inserisci la tua email"
+									autocomplete="email"
+								/>
+								<input data-members-newsletter type="hidden" value="Afterword" />
+								<button type="submit">Iscriviti</button>
+								<p data-members-success>Controlla la tua casella per confermare l'iscrizione.</p>
+								<p data-members-error>Qualcosa e andato storto. Riprova.</p>
+							</form>
+						</div>
+					</section>
+
+					<p class="locale-note">
+						Se preferisci seguire il sito dal tuo reader, qui sotto trovi i feed piu utili.
+						RSS di solito e la scelta piu semplice, ma ho incluso anche i feed JSON.
+					</p>
+
+					<div class="subscribe-feed-list">
+						{feeds.map((feed) => (
+							<section class="subscribe-feed-card">
+								<h2>{feed.title}</h2>
+								<p>{feed.description}</p>
+								<div class="subscribe-feed-links">
+									<a href={feed.rssUrl}>RSS</a>
+									<a href={feed.jsonUrl}>JSON</a>
+								</div>
+							</section>
+						))}
+					</div>
+				</section>
+			</div>
+		</article>
+	</section>
+</Base>
+
+<style>
+	.subscribe-page {
+		display: grid;
+		gap: 2rem;
+	}
+
+	.subscribe-feed-list {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.subscribe-feed-card {
+		padding: 1.1rem 1.2rem;
+		border: 1px solid rgba(245, 241, 171, 0.18);
+		border-radius: 1rem;
+		background: rgba(255, 255, 255, 0.02);
+	}
+
+	.subscribe-feed-card h2,
+	.subscribe-planning h2 {
+		margin: 0 0 0.45rem;
+		font-size: 1.05rem;
+	}
+
+	.subscribe-feed-card p,
+	.subscribe-planning p {
+		margin: 0;
+	}
+
+	.subscribe-feed-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.9rem;
+		margin-top: 0.85rem;
+		font-family: var(--font-mono, "IBM Plex Mono", monospace);
+		font-size: 0.92rem;
+	}
+
+	.subscribe-feed-links a {
+		font-weight: 600;
+	}
+
+	.subscribe-planning {
+		padding-top: 0.25rem;
+	}
+
+	.subscribe-embed {
+		margin-top: 1rem;
+	}
+
+	.ghost-newsletter-form {
+		max-width: 440px;
+		margin: 0 auto;
+		display: grid;
+		gap: 12px;
+	}
+
+	.ghost-newsletter-form input[type="email"] {
+		width: 100%;
+		padding: 14px 16px;
+		border-radius: 6px;
+		border: 1px solid #ccc;
+		background: rgba(255, 255, 255, 0.96);
+		color: #1e2021;
+		font-size: 16px;
+	}
+
+	.ghost-newsletter-form input[type="email"]::placeholder {
+		color: rgba(30, 32, 33, 0.6);
+	}
+
+	.ghost-newsletter-form button {
+		padding: 14px 16px;
+		border: 0;
+		border-radius: 6px;
+		background: #4b9cb4;
+		color: #fff;
+		font-size: 16px;
+		cursor: pointer;
+	}
+
+	.ghost-newsletter-form [data-members-success],
+	.ghost-newsletter-form [data-members-error] {
+		display: none;
+		font-size: 14px;
+		margin: 0;
+	}
+
+	.locale-note {
+		margin: 0;
+		color: rgba(245, 243, 238, 0.78);
+	}
+
+	:global(.ghost-newsletter-form.success) [data-members-success] {
+		display: block;
+		color: #bde7b3;
+	}
+
+	:global(.ghost-newsletter-form.error) [data-members-error] {
+		display: block;
+		color: #ffb8b8;
+	}
+</style>

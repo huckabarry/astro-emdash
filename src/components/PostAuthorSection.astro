@@ -1,0 +1,20 @@
+---
+import { getSections } from "emdash";
+import { PortableText } from "emdash/ui";
+
+const { items: sections } = await getSections({ limit: 100 });
+const section =
+	sections.find((item) => item.slug === "about-the-author") ||
+	sections.find((item) => item.title.trim().toLowerCase() === "about the author") ||
+	sections.find((item) => item.title.trim().toLowerCase() === "about author") ||
+	null;
+---
+
+{section ? (
+	<section class="author-section" aria-label={section.title}>
+		<h2 class="author-section__title">{section.title}</h2>
+		<div class="author-section__content">
+			<PortableText value={section.content} />
+		</div>
+	</section>
+) : null}
