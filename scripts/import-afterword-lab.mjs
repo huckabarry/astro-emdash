@@ -10,6 +10,7 @@ const GHOST_INPUT = path.join(AFTERWORD_ROOT, "data", "ghost-posts-lite.json");
 const ABOUT_INPUT = path.join(AFTERWORD_ROOT, "src", "content", "about.md");
 const COLOPHON_INPUT = path.join(AFTERWORD_ROOT, "src", "content", "colophon.md");
 const OUTPUT_SEED = path.join(PROJECT_ROOT, "seed", "seed.json");
+const EARLIER_WEB_FEED = "https://afterword.blog/earlier-web/feed.json";
 
 const SITE_TITLE = "Afterword";
 const SITE_TAGLINE = "An Astro and EmDash sandbox for trying things out.";
@@ -79,6 +80,25 @@ function toPortableTextFromHtml(html) {
 	return markdownToPortableText(markdown);
 }
 
+function absolutizeAfterwordUrl(value) {
+	const stringValue = String(value || "").trim();
+	if (!stringValue) return "";
+	if (stringValue.startsWith("http://") || stringValue.startsWith("https://")) {
+		return stringValue;
+	}
+	if (stringValue.startsWith("/")) {
+		return `https://afterword.blog${stringValue}`;
+	}
+	return stringValue;
+}
+
+function absolutizeEarlierWebHtml(html) {
+	return String(html || "").replace(
+		/(src|href)="(\/[^"]+)"/g,
+		(_match, attr, url) => `${attr}="${absolutizeAfterwordUrl(url)}"`,
+	);
+}
+
 function formatTagLabel(slug) {
 	return String(slug || "")
 		.split("-")
@@ -145,7 +165,54 @@ function filenameFromUrl(url) {
 	}
 }
 
-function buildSeed({ aboutContent, helloContent, colophonContent, ghostPosts, tagMap }) {
+function ensureUniqueSlug(slug, usedSlugs, fallbackId) {
+	let candidate = slugify(slug) || slugify(fallbackId) || "entry";
+	if (!usedSlugs.has(candidate)) {
+		usedSlugs.add(candidate);
+		return candidate;
+	}
+
+	const suffixSource = slugify(fallbackId).slice(-8) || "entry";
+	candidate = `${candidate}-${suffixSource}`;
+	let counter = 2;
+	while (usedSlugs.has(candidate)) {
+		candidate = `${slugify(slug) || "entry"}-${suffixSource}-${counter}`;
+		counter += 1;
+	}
+	usedSlugs.add(candidate);
+	return candidate;
+}
+
+async function fetchEarlierWebPosts() {
+	const posts = [];
+	let cursor = null;
+
+	while (true) {
+		const url = new URL(EARLIER_WEB_FEED);
+		url.searchParams.set("limit", "100");
+		if (cursor) {
+			url.searchParams.set("cursor", cursor);
+		}
+
+		const response = await fetch(url);
+		if (!response.ok) {
+			throw new Error(`Unable to fetch Earlier Web feed: ${response.status} ${response.statusText}`);
+		}
+
+		const payload = await response.json();
+		const pagePosts = Array.isArray(payload.posts) ? payload.posts : [];
+		posts.push(...pagePosts);
+
+		cursor = typeof payload.cursor === "string" && payload.cursor ? payload.cursor : null;
+		if (!cursor || pagePosts.length === 0) {
+			break;
+		}
+	}
+
+	return posts;
+}
+
+function buildSeed({ aboutContent, helloContent, colophonContent, posts, tagMap }) {
 	return {
 		$schema: "https://emdashcms.com/seed.schema.json",
 		version: "1",
@@ -188,6 +255,21 @@ function buildSeed({ aboutContent, helloContent, colophonContent, ghostPosts, ta
 						slug: "excerpt",
 						label: "Excerpt",
 						type: "text",
+					},
+					{
+						slug: "source_type",
+						label: "Source Type",
+						type: "string",
+					},
+					{
+						slug: "source_path",
+						label: "Source Path",
+						type: "text",
+					},
+					{
+						slug: "source_published_at",
+						label: "Source Published At",
+						type: "string",
 					},
 				],
 			},
@@ -303,27 +385,7 @@ function buildSeed({ aboutContent, helloContent, colophonContent, ghostPosts, ta
 					},
 				},
 			],
-			posts: ghostPosts.map((post) => ({
-				id: `post-${post.slug}`,
-				slug: post.slug,
-				status: "published",
-				data: {
-					title: post.title,
-					excerpt: post.custom_excerpt || post.excerpt || "",
-					featured_image: post.feature_image
-						? toMediaReference(
-								post.feature_image,
-								post.feature_image_alt || post.title,
-								filenameFromUrl(post.feature_image),
-							)
-						: undefined,
-					content: toPortableTextFromHtml(post.html),
-				},
-				bylines: [{ byline: PRIMARY_BYLINE_ID }],
-				taxonomies: {
-					tag: toPublicTags(post).map((tag) => tag.slug),
-				},
-			})),
+			posts,
 		},
 	};
 }
@@ -333,30 +395,104 @@ async function main() {
 	const ghostPosts = (Array.isArray(rawGhost) ? rawGhost : rawGhost.posts || [])
 		.filter((post) => post?.title && post?.slug && post?.html && post?.status === "published")
 		.sort((a, b) => new Date(a.published_at || 0).getTime() - new Date(b.published_at || 0).getTime());
+	const earlierWebPosts = (await fetchEarlierWebPosts()).sort(
+		(a, b) => new Date(a.publishedAt || 0).getTime() - new Date(b.publishedAt || 0).getTime(),
+	);
 
 	const aboutMarkdown = parseFrontmatter(await fs.readFile(ABOUT_INPUT, "utf8")).body;
 	const colophonMarkdown = parseFrontmatter(await fs.readFile(COLOPHON_INPUT, "utf8")).body;
 	const helloMarkdown = buildHelloMarkdown();
 
 	const tagMap = new Map();
+	const usedSlugs = new Set();
+
+	const ghostEntries = ghostPosts.map((post) => {
+		const slug = ensureUniqueSlug(post.slug, usedSlugs, post.slug);
+		return {
+			id: `post-${slug}`,
+			slug,
+			status: "published",
+			data: {
+				title: post.title,
+				excerpt: post.custom_excerpt || post.excerpt || "",
+				featured_image: post.feature_image
+					? toMediaReference(
+							post.feature_image,
+							post.feature_image_alt || post.title,
+							filenameFromUrl(post.feature_image),
+						)
+					: undefined,
+				content: toPortableTextFromHtml(post.html),
+				source_type: "ghost",
+				source_path: post.url || "",
+				source_published_at: post.published_at || "",
+			},
+			bylines: [{ byline: PRIMARY_BYLINE_ID }],
+			taxonomies: {
+				tag: toPublicTags(post).map((tag) => tag.slug),
+			},
+		};
+	});
+
 	for (const post of ghostPosts) {
 		for (const tag of toPublicTags(post)) {
 			tagMap.set(tag.slug, tag.label || formatTagLabel(tag.slug));
 		}
 	}
 
+	tagMap.set("earlier-web", "Earlier Web");
+
+	const earlierEntries = earlierWebPosts
+		.filter((post) => post?.slug && post?.title && post?.bodyHtml)
+		.map((post) => {
+			const slug = ensureUniqueSlug(post.slug, usedSlugs, post.id || post.slug);
+			const sourceType = slugify(post.sourceType || "") || "earlier-web";
+			tagMap.set(sourceType, formatTagLabel(sourceType));
+
+			return {
+				id: `earlier-${post.id || slug}`,
+				slug,
+				status: "published",
+				data: {
+					title: post.title,
+					excerpt: post.excerpt || "",
+					featured_image: post.coverImage
+						? toMediaReference(
+								absolutizeAfterwordUrl(post.coverImage),
+								post.title,
+								filenameFromUrl(absolutizeAfterwordUrl(post.coverImage)),
+							)
+						: undefined,
+					content: toPortableTextFromHtml(absolutizeEarlierWebHtml(post.bodyHtml)),
+					source_type: post.sourceType || "earlier-web",
+					source_path: post.path || "",
+					source_published_at: post.publishedAt || "",
+				},
+				bylines: [{ byline: PRIMARY_BYLINE_ID }],
+				taxonomies: {
+					tag: ["earlier-web", sourceType],
+				},
+			};
+		});
+
 	const seed = buildSeed({
 		aboutContent: toPortableTextFromMarkdown(aboutMarkdown),
 		helloContent: toPortableTextFromMarkdown(helloMarkdown),
 		colophonContent: toPortableTextFromMarkdown(colophonMarkdown),
-		ghostPosts,
+		posts: [...ghostEntries, ...earlierEntries].sort((a, b) => {
+			const left = new Date(a.data.source_published_at || 0).getTime();
+			const right = new Date(b.data.source_published_at || 0).getTime();
+			return left - right;
+		}),
 		tagMap,
 	});
 
 	await fs.mkdir(path.dirname(OUTPUT_SEED), { recursive: true });
 	await fs.writeFile(OUTPUT_SEED, `${JSON.stringify(seed, null, "\t")}\n`, "utf8");
 
-	console.log(`Wrote ${ghostPosts.length} posts and 3 pages to ${OUTPUT_SEED}`);
+	console.log(
+		`Wrote ${ghostEntries.length + earlierEntries.length} posts (${ghostEntries.length} Ghost, ${earlierEntries.length} Earlier Web) and 3 pages to ${OUTPUT_SEED}`,
+	);
 }
 
 main().catch((error) => {
