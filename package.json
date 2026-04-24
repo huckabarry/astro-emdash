@@ -20,7 +20,7 @@
 	"dependencies": {
 		"@astrojs/cloudflare": "^13.1.7",
 		"@astrojs/react": "^5.0.3",
-		"@emdash-cms/cloudflare": "^0.6.0",
+		"@emdash-cms/cloudflare": "^0.7.0",
 		"@emdash-cms/plugin-atproto": "^0.1.1",
 		"@emdash-cms/plugin-embeds": "^0.1.6",
 		"@emdash-cms/plugin-forms": "^0.1.1",
@@ -28,7 +28,7 @@
 		"@tiptap/extension-collaboration": "^3.22.3",
 		"@tiptap/y-tiptap": "^3.0.3",
 		"astro": "^6.1.4",
-		"emdash": "^0.6.0",
+		"emdash": "^0.7.0",
 		"leaflet": "^1.9.4",
 		"react": "^19.2.4",
 		"react-dom": "^19.2.4",
@@ -39,7 +39,7 @@
 	"overrides": {
 		"@emdash-cms/plugin-atproto": {
 			".": "^0.1.1",
-			"emdash": "0.6.0"
+			"emdash": "0.7.0"
 		}
 	},
 	"devDependencies": {
