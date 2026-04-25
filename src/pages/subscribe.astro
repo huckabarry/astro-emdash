@@ -37,48 +37,16 @@ const feeds = [
 
 <Base
 	title="Subscribe"
-	description="Subscribe to Afterword by email, RSS, or JSON feed, with options for writing, planning, status, media, and the full public stream."
+	description="Follow Afterword by RSS or JSON feed, with options for writing, planning, status, media, and the full public stream."
 >
-	<script
-		is:inline
-		defer
-		src="https://cdn.jsdelivr.net/ghost/portal@~2.67/umd/portal.min.js"
-		data-i18n="true"
-		data-ghost="https://lowvelocity.org/"
-		data-key="531a03d1af5b6e4749d8189195"
-		data-api="https://lowvelocity.org/ghost/api/content/"
-		data-locale="en"
-		crossorigin="anonymous"
-	></script>
-
 	<section class="section-block">
 		<h1 class="section-title">Subscribe</h1>
 		<article class="content content-page">
 			<div class="post-full-content">
 				<section class="content-body subscribe-page">
-					<section class="subscribe-planning">
-						<h2>Email Updates</h2>
-						<p>If you’d rather get new posts by email, you can subscribe directly here:</p>
-						<div class="subscribe-embed">
-							<form data-members-form="subscribe" class="ghost-newsletter-form">
-								<input
-									data-members-email
-									type="email"
-									required
-									placeholder="Enter your email"
-									autocomplete="email"
-								/>
-								<input data-members-newsletter type="hidden" value="Afterword" />
-								<button type="submit">Subscribe</button>
-								<p data-members-success>Check your inbox to confirm your subscription.</p>
-								<p data-members-error>Something went wrong. Please try again.</p>
-							</form>
-						</div>
-					</section>
-
 					<p>
-						If you’d rather follow this site from your own reader, these are the cleanest feed
-						options. RSS is usually the safest choice, but I’ve included JSON feeds too.
+						The cleanest way to follow Afterword right now is from your own reader. RSS is
+						usually the safest choice, but I’ve included JSON feeds too.
 					</p>
 
 					<div class="subscribe-feed-list">
@@ -117,14 +85,12 @@ const feeds = [
 		background: rgba(255, 255, 255, 0.02);
 	}
 
-	.subscribe-feed-card h2,
-	.subscribe-planning h2 {
+	.subscribe-feed-card h2 {
 		margin: 0 0 0.45rem;
 		font-size: 1.05rem;
 	}
 
-	.subscribe-feed-card p,
-	.subscribe-planning p {
+	.subscribe-feed-card p {
 		margin: 0;
 	}
 
@@ -139,61 +105,5 @@ const feeds = [
 
 	.subscribe-feed-links a {
 		font-weight: 600;
-	}
-
-	.subscribe-planning {
-		padding-top: 0.25rem;
-	}
-
-	.subscribe-embed {
-		margin-top: 1rem;
-	}
-
-	.ghost-newsletter-form {
-		max-width: 440px;
-		margin: 0 auto;
-		display: grid;
-		gap: 12px;
-	}
-
-	.ghost-newsletter-form input[type="email"] {
-		width: 100%;
-		padding: 14px 16px;
-		border-radius: 6px;
-		border: 1px solid #ccc;
-		background: rgba(255, 255, 255, 0.96);
-		color: #1e2021;
-		font-size: 16px;
-	}
-
-	.ghost-newsletter-form input[type="email"]::placeholder {
-		color: rgba(30, 32, 33, 0.6);
-	}
-
-	.ghost-newsletter-form button {
-		padding: 14px 16px;
-		border: 0;
-		border-radius: 6px;
-		background: #4b9cb4;
-		color: #fff;
-		font-size: 16px;
-		cursor: pointer;
-	}
-
-	.ghost-newsletter-form [data-members-success],
-	.ghost-newsletter-form [data-members-error] {
-		display: none;
-		font-size: 14px;
-		margin: 0;
-	}
-
-	:global(.ghost-newsletter-form.success) [data-members-success] {
-		display: block;
-		color: #bde7b3;
-	}
-
-	:global(.ghost-newsletter-form.error) [data-members-error] {
-		display: block;
-		color: #ffb8b8;
 	}
 </style>
