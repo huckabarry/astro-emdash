@@ -1,5 +1,5 @@
 export const PUBLIC_ARCHIVE_CACHE_CONTROL =
-	"public, max-age=300, s-maxage=300, stale-while-revalidate=86400";
+	"public, max-age=60, s-maxage=60, stale-while-revalidate=600";
 
 export const PUBLIC_SEARCH_CACHE_CONTROL =
 	"public, max-age=60, s-maxage=300, stale-while-revalidate=3600";
