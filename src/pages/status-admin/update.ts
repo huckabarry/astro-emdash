@@ -1,40 +1,7 @@
 import type { APIRoute } from "astro";
-import { env } from "cloudflare:workers";
-
-import { getStatusRecordKey, updateStatusText } from "../../lib/status";
 
 export const prerender = false;
 
-function redirectWithMessage(origin: URL, ok: boolean, message: string) {
-	const url = new URL("/status-admin", origin);
-	url.searchParams.set("ok", ok ? "1" : "0");
-	url.searchParams.set("message", message);
-	return Response.redirect(url.toString(), 303);
-}
-
-export const POST: APIRoute = async ({ request, locals, session }) => {
-	const user = locals.user || (await session?.get("user"));
-	if (!user) {
-		return Response.redirect(new URL("/_emdash/admin/login?redirect=/status-admin", request.url), 303);
-	}
-
-	const formData = await request.formData();
-	const uri = String(formData.get("uri") || "").trim();
-	const text = String(formData.get("text") || "");
-
-	if (!uri) {
-		return redirectWithMessage(new URL(request.url), false, "Missing Bluesky post URI.");
-	}
-
-	try {
-		const rkey = getStatusRecordKey(uri);
-		await updateStatusText(env as unknown as Record<string, unknown>, rkey, text);
-		return redirectWithMessage(new URL(request.url), true, "Bluesky post updated.");
-	} catch (error) {
-		return redirectWithMessage(
-			new URL(request.url),
-			false,
-			error instanceof Error ? error.message : "Unable to update Bluesky post.",
-		);
-	}
+export const POST: APIRoute = async () => {
+	return Response.redirect("https://sync.afterword.blog/admin/posts", 303);
 };
