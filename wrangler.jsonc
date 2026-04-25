@@ -30,11 +30,6 @@
 			"bucket_name": "afterword-emdash-lab",
 			"preview_bucket_name": "afterword-emdash-lab"
 		},
-		{
-			"binding": "LEGACY_MEDIA",
-			"bucket_name": "afterword",
-			"preview_bucket_name": "afterword"
-		},
 	],
 	"observability": {
 		"enabled": true,

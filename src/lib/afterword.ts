@@ -1,10 +1,6 @@
-import { rewriteLegacyMediaUrl } from "./legacy-media";
-
 function withOrigin(url: string, origin: string): string {
 	if (!url) return url;
-	if (url.startsWith("http://") || url.startsWith("https://")) {
-		return rewriteLegacyMediaUrl(url, origin);
-	}
+	if (url.startsWith("http://") || url.startsWith("https://")) return url;
 	if (url.startsWith("/")) return origin ? `${origin}${url}` : url;
 	return url;
 }
