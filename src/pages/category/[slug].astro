@@ -2,7 +2,6 @@
 import { getTerm, getEmDashCollection } from "emdash";
 import Base from "../../layouts/Base.astro";
 import PostCard from "../../components/PostCard.astro";
-import { getReadingTime } from "../../utils/reading-time";
 import {
 	PUBLIC_ARCHIVE_CACHE_CONTROL,
 	fallbackTagLabel,
@@ -60,15 +59,12 @@ const filteredPosts = posts.map((post) => ({
 				<p class="no-posts">No posts in this category yet.</p>
 			) : (
 				<div class="posts-grid">
-					{filteredPosts.map(({ post, tags }) => (
+					{filteredPosts.map(({ post }) => (
 						<PostCard
 							title={post.data.title}
 							excerpt={post.data.excerpt}
-							featuredImage={post.data.featured_image}
 							href={`/posts/${post.id}`}
 							date={post.data.publishedAt ?? undefined}
-							readingTime={getReadingTime(post.data.content)}
-							tags={tags.map((t) => ({ slug: t.slug, label: t.label }))}
 						/>
 					))}
 				</div>

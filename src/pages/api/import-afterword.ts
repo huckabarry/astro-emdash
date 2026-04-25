@@ -8,6 +8,14 @@ export const prerender = false;
 
 const IMPORT_TOKEN = "afterword-import-2026-04-05";
 
+type ImportPayload = {
+	scope?: string;
+	offset?: number;
+	limit?: number;
+	totalPosts?: number;
+	seed?: any;
+};
+
 export const POST: APIRoute = async ({ request }) => {
 	try {
 		const headerToken = request.headers.get("x-afterword-import-token");
@@ -16,7 +24,7 @@ export const POST: APIRoute = async ({ request }) => {
 			return new Response("Not found", { status: 404 });
 		}
 
-		const payload = await request.json();
+		const payload = (await request.json()) as ImportPayload;
 		const scope = payload?.scope === "posts" ? "posts" : "bootstrap";
 		const offset = Number.isFinite(payload?.offset) ? Number(payload.offset) : 0;
 		const limit = Number.isFinite(payload?.limit) ? Number(payload.limit) : 0;

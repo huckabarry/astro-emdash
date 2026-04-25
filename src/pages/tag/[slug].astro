@@ -1,4 +1,3 @@
 ---
-const slug = Astro.params.slug || "";
-return Astro.redirect(slug ? `/tags/${slug}` : "/tags", 302);
+return Astro.redirect(Astro.params.slug ? `/tags/${Astro.params.slug}` : "/tags", 302);
 ---

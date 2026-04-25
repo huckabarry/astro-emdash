@@ -28,7 +28,7 @@ export const POST: APIRoute = async ({ request, locals, session }) => {
 
 	try {
 		const rkey = getStatusRecordKey(uri);
-		await updateStatusText(env, rkey, text);
+		await updateStatusText(env as unknown as Record<string, unknown>, rkey, text);
 		return redirectWithMessage(new URL(request.url), true, "Bluesky post updated.");
 	} catch (error) {
 		return redirectWithMessage(

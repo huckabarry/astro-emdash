@@ -42,6 +42,11 @@ const configuredSiteTitle = await getSiteSetting("title");
 const siteTitle = typeof configuredSiteTitle === "string" && configuredSiteTitle.trim()
 	? configuredSiteTitle.trim()
 	: "Afterword";
+type NavLink = {
+	href: string;
+	label: string;
+	target?: string | null;
+};
 const atprotoProfileHandle =
 	(process.env.STANDARD_SITE_IDENTIFIER || process.env.ATPROTO_IDENTIFIER || "").trim() ||
 	"afterword.blog";
@@ -50,16 +55,15 @@ const profile = {
 	avatarUrl: "/assets/images/status-avatar.jpg",
 	verificationLinks: [{ label: "Bluesky", url: `https://bsky.app/profile/${atprotoProfileHandle}` }],
 };
-const siteSettings = {};
 const fullTitle = title.includes(siteTitle) ? title : `${title} | ${siteTitle}`;
 const isLoggedIn = !!Astro.locals.user;
-const fallbackPrimaryNavLinks = [
+const fallbackPrimaryNavLinks: Array<{ href: string; labelKey: string; target?: string | null }> = [
 	{ href: "/", labelKey: "home" },
 	{ href: "/status", labelKey: "status" },
 	{ href: "/gallery", labelKey: "gallery" },
 	{ href: "/about", labelKey: "about" },
 ];
-const fallbackSecondaryNavLinks = [
+const fallbackSecondaryNavLinks: Array<{ href: string; labelKey: string; target?: string | null }> = [
 	{ href: "/hello", labelKey: "hello" },
 	{ href: "/check-ins", labelKey: "checkins" },
 	{ href: "/media", labelKey: "media" },
@@ -120,7 +124,7 @@ function portableTextPlainText(value: unknown) {
 
 const subtitleText = portableTextPlainText(subtitleSection?.content) ?? null;
 const currentLocale = normalizeLocale(Astro.currentLocale);
-const primaryNavLinks = primaryMenu?.items?.length
+const primaryNavLinks: NavLink[] = primaryMenu?.items?.length
 	? primaryMenu.items.map((item) => ({
 			href: item.url,
 			label: item.label,
@@ -129,8 +133,9 @@ const primaryNavLinks = primaryMenu?.items?.length
 	: fallbackPrimaryNavLinks.map((item) => ({
 			href: item.href,
 			label: navLabel(item.labelKey, currentLocale),
+			target: item.target ?? null,
 	  }));
-const secondaryNavLinks = moreMenu?.items?.length
+const secondaryNavLinks: NavLink[] = moreMenu?.items?.length
 	? moreMenu.items.map((item) => ({
 			href: item.url,
 			label: item.label,
@@ -139,6 +144,7 @@ const secondaryNavLinks = moreMenu?.items?.length
 	: fallbackSecondaryNavLinks.map((item) => ({
 			href: item.href,
 			label: navLabel(item.labelKey, currentLocale),
+			target: item.target ?? null,
 	  }));
 const localizedFooterNavLinks = footerNavLinks.map((item) => ({
 	href: localizePath(item.href, currentLocale),
@@ -170,6 +176,7 @@ const languageLinks = [
 		<link rel="preload" href="/fonts/ibm-plex-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
 		<link rel="preload" href="/fonts/ibm-plex-mono-latin-500-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
 		<script
+			is:inline
 			defer
 			src="https://analytics.afterword.blog/script.js"
 			data-website-id="28725456-c68f-411a-a1d6-0b548e1c5213"

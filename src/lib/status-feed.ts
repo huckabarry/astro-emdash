@@ -98,25 +98,6 @@ function normalizeImage(value: Record<string, unknown>): StatusFeedImage {
 	};
 }
 
-function normalizeExternal(value: Record<string, unknown> | null | undefined) {
-	if (!value) {
-		return null;
-	}
-
-	const uri = normalizeString(value.uri);
-	if (!uri) {
-		return null;
-	}
-
-	return {
-		uri,
-		title: normalizeString(value.title),
-		description: normalizeString(value.description),
-		domain: normalizeString(value.domain),
-		thumb: normalizeString(value.thumb),
-	} satisfies StatusFeedExternal;
-}
-
 function normalizeVideo(value: Record<string, unknown> | null | undefined) {
 	if (!value) {
 		return null;
@@ -137,81 +118,6 @@ function normalizeVideo(value: Record<string, unknown> | null | undefined) {
 		width: Number(aspectRatio?.width || 0),
 		height: Number(aspectRatio?.height || 0),
 	} satisfies StatusFeedVideo;
-}
-
-function normalizeQuotedPost(value: Record<string, unknown> | null | undefined) {
-	if (!value) {
-		return null;
-	}
-
-	const blueskyUrl = normalizeString(value.blueskyUrl);
-	if (!blueskyUrl) {
-		return null;
-	}
-
-	return {
-		uri: normalizeString(value.uri),
-		blueskyUrl,
-		displayName: normalizeString(value.displayName),
-		handle: normalizeString(value.handle),
-		avatar: normalizeString(value.avatar),
-		date: new Date(normalizeString(value.date)),
-		text: normalizeString(value.text),
-		html: normalizeString(value.html),
-		images: Array.isArray(value.images)
-			? value.images.map((image) => normalizeImage(image as Record<string, unknown>))
-			: [],
-		external: normalizeExternal((value.external as Record<string, unknown> | null) || null),
-		video: normalizeVideo((value.video as Record<string, unknown> | null) || null),
-	} satisfies StatusFeedQuotedPost;
-}
-
-function normalizeReplyTo(value: Record<string, unknown> | null | undefined) {
-	if (!value) {
-		return null;
-	}
-
-	const blueskyUrl = normalizeString(value.blueskyUrl);
-	if (!blueskyUrl) {
-		return null;
-	}
-
-	return {
-		uri: normalizeString(value.uri) || null,
-		blueskyUrl,
-		displayName: normalizeString(value.displayName),
-		handle: normalizeString(value.handle),
-	} satisfies StatusFeedReplyTo;
-}
-
-function normalizeStatus(value: Record<string, unknown>): StatusFeedItem {
-	return {
-		id: normalizeString(value.id),
-		uri: normalizeString(value.uri),
-		slug: normalizeString(value.slug),
-		text: normalizeString(value.text),
-		html: normalizeString(value.html),
-		date: new Date(normalizeString(value.date)),
-		blueskyUrl: normalizeString(value.blueskyUrl),
-		displayName: normalizeString(value.displayName),
-		handle: normalizeString(value.handle),
-		avatar: normalizeString(value.avatar),
-		isReply: Boolean(value.isReply),
-		replyCount: Number(value.replyCount || 0),
-		repostCount: Number(value.repostCount || 0),
-		quoteCount: Number(value.quoteCount || 0),
-		likeCount: Number(value.likeCount || 0),
-		images: Array.isArray(value.images)
-			? value.images.map((image) => normalizeImage(image as Record<string, unknown>))
-			: [],
-		external: normalizeExternal((value.external as Record<string, unknown> | null) || null),
-		video: normalizeVideo((value.video as Record<string, unknown> | null) || null),
-		quotedPost: normalizeQuotedPost((value.quotedPost as Record<string, unknown> | null) || null),
-		replyTo: normalizeReplyTo((value.replyTo as Record<string, unknown> | null) || null),
-		replies: Array.isArray(value.replies)
-			? value.replies.map((reply) => normalizeStatus(reply as Record<string, unknown>))
-			: [],
-	};
 }
 
 function getPrimaryRepo() {

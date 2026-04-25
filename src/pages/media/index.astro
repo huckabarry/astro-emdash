@@ -1,6 +1,6 @@
 ---
 import Base from "../../layouts/Base.astro";
-import { getMediaTimelinePage } from "../../lib/media";
+import { getMediaTimelinePage, type MediaTimelineItem } from "../../lib/media";
 
 export const prerender = false;
 
@@ -9,11 +9,11 @@ Astro.response.headers.set("Cache-Control", "public, max-age=300, s-maxage=300, 
 const timelinePage = await getMediaTimelinePage(0, 8);
 const items = timelinePage.items;
 
-function usesPosterRatio(item) {
+function usesPosterRatio(item: MediaTimelineItem) {
 	return item.kind === "popfeed" && (item.mediaType === "movie" || item.mediaType === "tv_show");
 }
 
-function isBookPopfeed(item) {
+function isBookPopfeed(item: MediaTimelineItem) {
 	return item.kind === "popfeed" && item.mediaType === "book";
 }
 ---
@@ -228,6 +228,7 @@ function isBookPopfeed(item) {
 </Base>
 
 <script>
+	// @ts-nocheck
 	const timeline = document.querySelector(".media-timeline");
 	const sentinel = document.querySelector("[data-media-sentinel]");
 

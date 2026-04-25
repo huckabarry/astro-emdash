@@ -78,7 +78,7 @@ function toBase64(buffer: ArrayBuffer) {
 }
 
 async function fetchTileArrayBuffer(tileUrl: string, deadlineMs: number) {
-	const cache = caches?.default;
+	const cache = (caches as CacheStorage & { default?: Cache })?.default;
 	const cacheKey = new Request(tileUrl, { method: "GET" });
 
 	if (cache) {

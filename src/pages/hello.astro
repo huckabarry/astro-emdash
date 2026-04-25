@@ -83,6 +83,7 @@ const description =
 </Base>
 
 <script>
+	// @ts-nocheck
 	const initContactForm = () => {
 		const form = document.querySelector('[data-contact-form]');
 		if (!(form instanceof HTMLFormElement) || form.dataset.bound === "1") return;

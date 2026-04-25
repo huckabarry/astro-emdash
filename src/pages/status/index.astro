@@ -257,12 +257,13 @@ function getVideoLabel(post: (typeof statusPage.statuses)[number]) {
 	) : null}
 </Base>
 
-<script type="application/json" id="status-feed-initial" set:html={JSON.stringify({
+<script is:inline type="application/json" id="status-feed-initial" set:html={JSON.stringify({
 	authorAvatarUrl,
 	pageSize: statusPage.limit,
 })}></script>
 
 <script>
+	// @ts-nocheck
 	const configEl = document.getElementById("status-feed-initial");
 	const list = document.querySelector("[data-status-list]");
 	const loadButton = document.querySelector("[data-load-more]");

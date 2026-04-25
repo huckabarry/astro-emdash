@@ -7,7 +7,7 @@ export const prerender = false;
 
 Astro.response.headers.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
 
-const initialPage = await getCheckinsPage(env, { limit: 20 });
+const initialPage = await getCheckinsPage(env as unknown as Record<string, unknown>, { limit: 20 });
 
 function formatDate(value: Date) {
 	return value.toLocaleDateString("en-US", {
@@ -91,6 +91,7 @@ function excerpt(value: string, maxLength = 220) {
 	</Base>
 
 <script>
+	// @ts-nocheck
 	const list = document.querySelector(".list");
 	const sentinel = document.querySelector("[data-checkins-sentinel]");
 

@@ -1,7 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { definePlugin } from "emdash";
 import type {
-	EmailDeliverEvent,
 	PluginContext,
 	PluginDescriptor,
 	ResolvedPlugin,
@@ -9,6 +8,16 @@ import type {
 
 const PLUGIN_ID = "afterword-email";
 const VERSION = "0.1.0";
+
+type EmailDeliverEvent = {
+	message: {
+		to: string;
+		subject: string;
+		text: string;
+		html?: string | null;
+	};
+	source?: string | null;
+};
 
 export function afterwordEmailPlugin(): PluginDescriptor {
 	return {

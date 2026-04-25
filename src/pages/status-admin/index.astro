@@ -10,8 +10,9 @@ if (!user) {
 	return Astro.redirect("/_emdash/admin/login?redirect=/status-admin");
 }
 
-const statuses = await getStatuses(env, { limit: 30, includeReplies: true });
-const canEdit = hasStatusEditCredentials(env);
+const runtimeEnv = env as unknown as Record<string, unknown>;
+const statuses = await getStatuses(runtimeEnv, { limit: 30, includeReplies: true });
+const canEdit = hasStatusEditCredentials(runtimeEnv);
 
 const ok = Astro.url.searchParams.get("ok");
 const message = Astro.url.searchParams.get("message");

@@ -41,6 +41,9 @@ importers:
       emdash:
         specifier: ^0.7.0
         version: 0.7.0(536e08c724aafc927f0052f6b0424924)
+      kysely:
+        specifier: ^0.27.0
+        version: 0.27.6
       leaflet:
         specifier: ^1.9.4
         version: 1.9.4

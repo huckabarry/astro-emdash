@@ -7,7 +7,7 @@ export const prerender = false;
 export const GET: APIRoute = async ({ url }) => {
 	const limit = Number.parseInt(url.searchParams.get("limit") || "", 10);
 	const cursor = url.searchParams.get("cursor");
-	const page = await getCheckinsPage(env, {
+	const page = await getCheckinsPage(env as unknown as Record<string, unknown>, {
 		limit: Number.isFinite(limit) ? limit : 20,
 		cursor,
 	});

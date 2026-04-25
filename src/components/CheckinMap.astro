@@ -34,7 +34,7 @@ const {
 ></div>
 
 <script>
-	async function bootCheckinMap(element) {
+	async function bootCheckinMap(element: HTMLElement | Element) {
 		if (!(element instanceof HTMLElement) || element.dataset.mapReady === "true") {
 			return;
 		}

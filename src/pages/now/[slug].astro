@@ -38,7 +38,7 @@ const seo = getSeoMeta(post, {
 	siteTitle: "Afterword",
 	siteUrl: Astro.url.origin,
 	path: `/now/${slug}`,
-	defaultOgImage: getImageUrl(post.data.featured_image, Astro.url.origin),
+	defaultOgImage: getImageUrl(post.data.featured_image, Astro.url.origin) || undefined,
 });
 ---
 

@@ -60,7 +60,7 @@ async function handle(request: Request, includeBody: boolean) {
 		return new Response(null, { status: 302, headers });
 	}
 
-	const cache = caches.default;
+	const cache = (caches as CacheStorage & { default: Cache }).default;
 	if (request.method === "GET") {
 		const cached = await cache.match(request);
 		if (cached) {

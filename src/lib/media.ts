@@ -57,6 +57,14 @@ export type TrackEntry = {
   listenLinks: { label: string; url: string }[];
 };
 
+type SerializedAlbumEntry = Omit<AlbumEntry, "publishedAt"> & {
+  publishedAt: string;
+};
+
+type SerializedTrackEntry = Omit<TrackEntry, "publishedAt"> & {
+  publishedAt: string;
+};
+
 export type PopfeedItemType = "book" | "movie" | "tv_show";
 
 export type PopfeedItem = {
@@ -94,6 +102,18 @@ export type PopfeedItem = {
   links: { label: string; url: string }[];
 };
 
+type SerializedPopfeedItem = Omit<
+  PopfeedItem,
+  "addedAt" | "activityAt" | "startedAt" | "completedAt" | "releaseDate" | "date"
+> & {
+  addedAt: string | null;
+  activityAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  releaseDate: string | null;
+  date: string;
+};
+
 export type MediaTimelineItem = {
   id: string;
   kind: "track" | "album" | "popfeed";
@@ -129,6 +149,10 @@ type MediaTimelinePageResponse = {
     kinds?: MediaTimelineFilterKind[];
     mediaTypes?: PopfeedItemType[];
   };
+};
+
+type MediaCollectionResponse<T> = {
+  items?: T[];
 };
 
 function getCacheScope() {
@@ -197,7 +221,7 @@ function normalizeString(value: unknown) {
   return String(value || "").trim();
 }
 
-function getMediaTimelineApiBaseUrl(runtimeEnv: RuntimeEnv = env) {
+function getMediaApiBaseUrl(runtimeEnv: RuntimeEnv = env as unknown as RuntimeEnv) {
   const configured = normalizeString(
     runtimeEnv.MEDIA_API_URL || runtimeEnv.SYNC_SITE_URL || MEDIA_API_BASE_URL,
   )
@@ -296,20 +320,6 @@ function splitTitleAndArtist(value: string) {
   }
 
   return { title: normalized.trim() || "Untitled", artist: "" };
-}
-
-function normalizeTrackKey(title: string, artist: string) {
-  return `${slugify(title)}::${slugify(artist)}`;
-}
-
-function extractMarkdownLink(body: string, pattern: RegExp) {
-  const match = String(body || "").match(
-    new RegExp(`\\[([^\\]]+)\\]\\(([^)]+)\\)`, "gi"),
-  );
-  if (!match) return null;
-  const matches = [...String(body || "").matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)];
-  const found = matches.find((entry) => pattern.test(entry[1]));
-  return found ? found[2] : null;
 }
 
 function extractAlbumFeedBody(contentHtml: string) {
@@ -428,14 +438,16 @@ async function getAlbumWhaleListenLinks() {
               },
               MEDIA_FETCH_TIMEOUT_MS,
             );
-            if (!response.ok) return [albumId, []] as const;
+            if (!response.ok) {
+              return [albumId, [] as { label: string; url: string }[]] as const;
+            }
             const html = await response.text();
             return [
               albumId,
               extractListenLinksFromAlbumPage(html, pageUrl),
-            ] as const;
+            ] as [string, { label: string; url: string }[]];
           } catch {
-            return [albumId, []] as const;
+            return [albumId, [] as { label: string; url: string }[]] as const;
           }
         }),
       );
@@ -723,6 +735,37 @@ function normalizeDate(value: unknown) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function normalizeRequiredDate(value: unknown, fallback = new Date(0)) {
+  const parsed = normalizeDate(value);
+  return parsed || fallback;
+}
+
+function hydrateAlbumEntry(entry: SerializedAlbumEntry): AlbumEntry {
+  return {
+    ...entry,
+    publishedAt: normalizeRequiredDate(entry.publishedAt),
+  };
+}
+
+function hydrateTrackEntry(entry: SerializedTrackEntry): TrackEntry {
+  return {
+    ...entry,
+    publishedAt: normalizeRequiredDate(entry.publishedAt),
+  };
+}
+
+function hydratePopfeedItem(item: SerializedPopfeedItem): PopfeedItem {
+  return {
+    ...item,
+    addedAt: normalizeDate(item.addedAt),
+    activityAt: normalizeDate(item.activityAt),
+    startedAt: normalizeDate(item.startedAt),
+    completedAt: normalizeDate(item.completedAt),
+    releaseDate: normalizeDate(item.releaseDate),
+    date: normalizeRequiredDate(item.date),
+  };
+}
+
 function normalizeStringArray(value: unknown) {
   return Array.isArray(value)
     ? value.map((entry) => String(entry || "").trim()).filter(Boolean)
@@ -986,7 +1029,7 @@ function normalizePopfeedItem(
 
 async function fetchPopfeedItems(): Promise<PopfeedItem[]> {
   try {
-    const runtimeEnv = env as RuntimeEnv;
+    const runtimeEnv = env as unknown as RuntimeEnv;
     const repo = getRepo(runtimeEnv);
     const { did, serviceUrl } = await resolveAtprotoService(runtimeEnv, repo);
     const [listRecords, itemRecords] = await Promise.all([
@@ -1127,7 +1170,7 @@ async function fetchRemoteMediaTimelinePage({
 
   const request = (async () => {
     const endpoint = new URL(
-      `${getMediaTimelineApiBaseUrl()}/media/timeline.json`,
+      `${getMediaApiBaseUrl()}/media/timeline.json`,
     );
     endpoint.searchParams.set("offset", String(normalizedOffset));
     endpoint.searchParams.set("limit", String(normalizedLimit));
@@ -1185,6 +1228,41 @@ async function fetchRemoteMediaTimelinePage({
   return request;
 }
 
+async function fetchMediaCollectionFromApi<T>(path: string) {
+  const endpoint = new URL(`${getMediaApiBaseUrl()}${path}`);
+  const response = await fetchWithTimeout(
+    endpoint,
+    {
+      headers: {
+        accept: "application/json",
+      },
+    },
+    MEDIA_FETCH_TIMEOUT_MS,
+  );
+
+  if (!response.ok) {
+    throw new Error(`Unable to fetch remote media collection ${path}: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as MediaCollectionResponse<T>;
+  return Array.isArray(payload.items) ? payload.items : [];
+}
+
+async function fetchAlbumsFromApi() {
+  const items = await fetchMediaCollectionFromApi<SerializedAlbumEntry>("/api/media/albums");
+  return items.map(hydrateAlbumEntry);
+}
+
+async function fetchTracksFromApi() {
+  const items = await fetchMediaCollectionFromApi<SerializedTrackEntry>("/api/media/tracks");
+  return items.map(hydrateTrackEntry);
+}
+
+async function fetchPopfeedItemsFromApi() {
+  const items = await fetchMediaCollectionFromApi<SerializedPopfeedItem>("/api/media/popfeed");
+  return items.map(hydratePopfeedItem);
+}
+
 async function fetchMediaState() {
   const scope = getCacheScope();
   const cached = scope.__afterwordAstroMediaCache;
@@ -1197,9 +1275,9 @@ async function fetchMediaState() {
   }
 
   const request = Promise.all([
-    fetchRemoteAlbums(),
-    fetchRemoteTracks(),
-    fetchPopfeedItems(),
+    fetchAlbumsFromApi(),
+    fetchTracksFromApi(),
+    fetchPopfeedItemsFromApi(),
   ])
     .then(([albums, tracks, popfeed]) => {
       const timeline = [
@@ -1229,15 +1307,44 @@ async function fetchMediaState() {
   try {
     return await request;
   } catch (error) {
+    console.warn("[media] Falling back to direct media assembly:", error);
+
+    try {
+      const fallbackState = await Promise.all([
+        fetchRemoteAlbums(),
+        fetchRemoteTracks(),
+        fetchPopfeedItems(),
+      ]).then(([albums, tracks, popfeed]) => {
+        const timeline = [
+          ...tracks.map(toTrackTimelineItem),
+          ...albums.map(toAlbumTimelineItem),
+          ...popfeed.map(toPopfeedTimelineItem),
+        ].sort(
+          (left, right) => Date.parse(right.dateIso) - Date.parse(left.dateIso),
+        );
+
+        return {
+          expiresAt: Date.now() + MEDIA_CACHE_TTL_MS,
+          albums,
+          tracks,
+          popfeed,
+          timeline,
+        };
+      });
+
+      scope.__afterwordAstroMediaCache = fallbackState;
+      return fallbackState;
+    } catch (fallbackError) {
+      console.warn(
+        "[media] Returning stale or empty media state after fallback failure:",
+        fallbackError,
+      );
+    }
+
     if (cached) {
-      console.warn("[media] Falling back to stale cached media state:", error);
       return cached;
     }
 
-    console.warn(
-      "[media] Returning empty media state after fetch failure:",
-      error,
-    );
     return {
       expiresAt: Date.now() + MEDIA_CACHE_TTL_MS,
       albums: [],

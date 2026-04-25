@@ -35,7 +35,7 @@ const seo = getSeoMeta(post, {
 	siteTitle: "Afterword",
 	siteUrl: Astro.url.origin,
 	path: `/posts/${slug}`,
-	defaultOgImage: getImageUrl(post.data.featured_image),
+	defaultOgImage: getImageUrl(post.data.featured_image) || undefined,
 });
 
 const tags = await getEntryTerms("posts", post.data.id, "tag");

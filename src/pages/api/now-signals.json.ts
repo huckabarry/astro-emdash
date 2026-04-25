@@ -8,8 +8,9 @@ import { withTimeout } from "../../lib/network";
 export const prerender = false;
 
 export const GET: APIRoute = async () => {
+	const runtimeEnv = env as unknown as Record<string, unknown>;
 	const [latestCheckin, latestTrack, onThisDayPosts] = await Promise.all([
-		withTimeout(getLatestCheckin(env), 1200, null),
+		withTimeout(getLatestCheckin(runtimeEnv), 1200, null),
 		withTimeout(getLatestTrack(), 1200, null),
 		withTimeout(getEarlierWebOnThisDayPosts(new Date(), 3), 800, []),
 	]);

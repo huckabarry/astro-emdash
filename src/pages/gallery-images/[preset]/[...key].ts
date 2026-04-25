@@ -32,7 +32,7 @@ async function fetchGalleryImage(sourceUrl: URL, preset: (typeof PRESETS)[keyof 
 				metadata: "none",
 			},
 		},
-	});
+	} as unknown as RequestInit);
 
 	if (transformed.ok && transformed.body) {
 		return transformed;
@@ -66,7 +66,7 @@ async function handle(context: APIContext, includeBody: boolean) {
 		return new Response("Gallery source not allowed.", { status: 403 });
 	}
 
-	const cache = caches.default;
+	const cache = (caches as CacheStorage & { default: Cache }).default;
 	if (request.method === "GET") {
 		const cached = await cache.match(request);
 		if (cached) {

@@ -9,8 +9,9 @@ export const prerender = false;
 Astro.response.headers.set("Cache-Control", "public, max-age=300, s-maxage=300, stale-while-revalidate=86400");
 
 const slug = String(Astro.params.slug || "");
-const checkins = await getCheckins(env);
-const item = await getCheckinBySlug(env, slug);
+const runtimeEnv = env as unknown as Record<string, unknown>;
+const checkins = await getCheckins(runtimeEnv);
+const item = await getCheckinBySlug(runtimeEnv, slug);
 
 if (!item) {
 	return Astro.redirect("/404");

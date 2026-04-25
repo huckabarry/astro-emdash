@@ -45,6 +45,20 @@ type GalleryPost = {
 	};
 };
 
+type GalleryPhoto = {
+	id: string;
+	postPath: string;
+	postTitle: string;
+	postPublishedAt: Date | null;
+	displayUrl: string;
+	lightboxUrl: string;
+	thumbSmUrl: string;
+	thumbMdUrl: string;
+	alt: string | null;
+	width: number | null;
+	height: number | null;
+};
+
 function sanitizeSegment(value: string) {
 	return String(value || "")
 		.toLowerCase()
@@ -118,18 +132,21 @@ function getGalleryVariantUrl(
 	return url.toString();
 }
 
-function buildPhoto(post: GalleryPost, image: unknown, imageIndex = 0) {
+function buildPhoto(post: GalleryPost, image: unknown, imageIndex = 0): GalleryPhoto | null {
 	const sourceUrl = getImageSourceUrl(image);
 	if (!sourceUrl) return null;
 
 	const { width, height } = getImageDimensions(image);
 	const postTitle = post.data.title ?? "Untitled";
+	const publishedAt = post.data.publishedAt ? new Date(post.data.publishedAt) : null;
+	const normalizedPublishedAt =
+		publishedAt && !Number.isNaN(publishedAt.getTime()) ? publishedAt : null;
 
 	return {
 		id: `${post.id}:${imageIndex}`,
 		postPath: `/posts/${post.slug || post.id}`,
 		postTitle,
-		postPublishedAt: post.data.publishedAt ?? null,
+		postPublishedAt: normalizedPublishedAt,
 		displayUrl: getGalleryVariantUrl(post, image, "thumb", sourceUrl, imageIndex),
 		lightboxUrl: getGalleryVariantUrl(post, image, "large", sourceUrl, imageIndex),
 		thumbSmUrl: getGalleryVariantUrl(post, image, "thumb-sm", sourceUrl, imageIndex),
@@ -169,7 +186,7 @@ const photos = posts.flatMap((post) => {
 
 	const photoSet = uniqueImages
 		.map((image, imageIndex) => buildPhoto(post, image, imageIndex))
-		.filter(Boolean);
+		.filter((photo): photo is GalleryPhoto => Boolean(photo));
 
 	if (photoSet.length) {
 		return photoSet;
@@ -257,16 +274,17 @@ const visiblePhotos = photos.slice(0, GALLERY_INITIAL_PHOTO_LIMIT);
 	</div>
 
 	<script
-			type="application/json"
-			id="gallery-lightbox-data"
-			set:html={JSON.stringify(
+		is:inline
+		type="application/json"
+		id="gallery-lightbox-data"
+		set:html={JSON.stringify(
 				visiblePhotos.map((photo) => ({
 					postPath: photo.postPath,
 					postTitle: photo.postTitle,
 					postPublishedAt: photo.postPublishedAt?.toISOString() ?? "",
 					lightboxUrl: photo.lightboxUrl,
 					alt: photo.alt || photo.postTitle,
-			})),
+				})),
 		)}
 	></script>
 

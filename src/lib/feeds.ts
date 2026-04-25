@@ -180,11 +180,15 @@ function renderPortableTextFeedHtml(
 	return parts.join("\n");
 }
 
-function buildPostFeedHtml(post: { data: Record<string, unknown> }, siteUrl: string) {
+function buildPostFeedHtml(
+	post: { data: { title?: unknown; featured_image?: unknown; content?: unknown } },
+	siteUrl: string,
+) {
 	const seenImages = new Set<string>();
-	const title = String(post.data.title || "Untitled");
+	const data = post.data as Record<string, unknown>;
+	const title = String(data.title || "Untitled");
 	const parts: string[] = [];
-	const featuredImage = renderFeedImage(post.data.featured_image, siteUrl, title, seenImages);
+	const featuredImage = renderFeedImage(data.featured_image, siteUrl, title, seenImages);
 	if (featuredImage) {
 		parts.push(featuredImage);
 	}
@@ -194,7 +198,7 @@ function buildPostFeedHtml(post: { data: Record<string, unknown> }, siteUrl: str
 		parts.push(html);
 	}
 
-	const portableHtml = renderPortableTextFeedHtml(post.data.content, siteUrl, title, seenImages);
+	const portableHtml = renderPortableTextFeedHtml(data.content, siteUrl, title, seenImages);
 	if (portableHtml) {
 		parts.push(portableHtml);
 	}
@@ -438,7 +442,7 @@ export async function getMediaFeedItems(site: URL | undefined, url: URL) {
 
 export async function getCheckinFeedItems(site: URL | undefined, url: URL) {
 	const siteUrl = getSiteUrl(site, url);
-	const items = await getCheckins(env);
+	const items = await getCheckins(env as unknown as Record<string, unknown>);
 
 	return items.slice(0, 30).map((item) => ({
 		id: item.slug,

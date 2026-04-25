@@ -35,7 +35,7 @@ const primaryStatusHandle = String(
 const [sidebarWidgetAreaResult, statusPageResult, latestCheckinResult, latestTrackResult] = await Promise.allSettled([
 	widgetArea ? Promise.resolve(widgetArea) : getWidgetArea("sidebar"),
 	getStatusFeedPage({ limit: 5 }),
-	withTimeout(getLatestCheckin(env), 1200, null),
+	withTimeout(getLatestCheckin(env as unknown as Record<string, unknown>), 1200, null),
 	withTimeout(getLatestTrack(), 1200, null),
 ]);
 

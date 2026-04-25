@@ -1,10 +1,23 @@
-import { extractPlainText, getEmDashCollection, getEmDashEntry, type ContentEntry } from "emdash";
+import { extractPlainText, getEmDashCollection, getEmDashEntry } from "emdash";
 import { portableTextToMarkdown } from "emdash/client";
 
 const EARLIER_WEB_CACHE_TTL_MS = 1000 * 60 * 10;
 export const EARLIER_WEB_STREAM_PAGE_SIZE = 30;
 
-type EarlierWebEntry = ContentEntry<Record<string, unknown>>;
+type EarlierWebEntry = {
+	id: string;
+	data: {
+		id?: string | null;
+		title?: string | null;
+		excerpt?: string | null;
+		publishedAt?: Date | string | null;
+		featured_image?: unknown;
+		content?: unknown;
+		source_path?: string | null;
+		source_type?: string | null;
+		source_published_at?: string | null;
+	};
+};
 
 export type EarlierWebYearSummary = {
 	year: number;
@@ -274,9 +287,9 @@ async function fetchAllEarlierWebEntries() {
 		.then(({ entries }) => {
 			scope.__afterwordAstroEarlierWeb = {
 				expiresAt: Date.now() + EARLIER_WEB_CACHE_TTL_MS,
-				entries,
+				entries: entries as EarlierWebEntry[],
 			};
-			return entries;
+			return entries as EarlierWebEntry[];
 		})
 		.finally(() => {
 			scope.__afterwordAstroEarlierWebPromise = null;
@@ -358,7 +371,7 @@ export async function getEarlierWebStreamHydratedPage({
 	});
 
 	return {
-		posts: entries.map(toPost),
+		posts: (entries as EarlierWebEntry[]).map(toPost),
 		cursor: nextCursor || null,
 		limit,
 	};
@@ -371,15 +384,16 @@ export async function getEarlierWebPostByDateSlug(year: number, month: number, s
 		return null;
 	}
 
-	const sourceType = getString(entry.data.source_type);
+	const earlierWebEntry = entry as EarlierWebEntry;
+	const sourceType = getString(earlierWebEntry.data.source_type);
 	if (!sourceType || sourceType === "ghost") {
 		return null;
 	}
 
-	const publishedAt = getPublishedDate(entry);
+	const publishedAt = getPublishedDate(earlierWebEntry);
 	if (publishedAt.getUTCFullYear() !== year || publishedAt.getUTCMonth() + 1 !== month) {
 		return null;
 	}
 
-	return toPost(entry);
+	return toPost(earlierWebEntry);
 }
