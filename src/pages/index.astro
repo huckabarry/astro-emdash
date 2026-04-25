@@ -271,8 +271,8 @@ function getVideoLabel(post: StatusFeedItem) {
 			)}
 
 			<div class="home-stream-tags">
-				<a class="tag-pill" href="/status" data-astro-prefetch="viewport">Status</a>
-				<a class="home-updates__more-link" href="/status" data-astro-prefetch="viewport">
+				<a class="tag-pill" href="/status">Status</a>
+				<a class="home-updates__more-link" href="/status">
 					Read more updates <span aria-hidden="true">→</span>
 				</a>
 			</div>
@@ -299,7 +299,6 @@ function getVideoLabel(post: StatusFeedItem) {
 								<a
 									class="blog-row__link home-feature-row__link"
 									href={`/posts/${post.id}`}
-									data-astro-prefetch="viewport"
 								>
 									{coverImage && (
 										<div class="home-feature-row__media">
@@ -327,15 +326,15 @@ function getVideoLabel(post: StatusFeedItem) {
 				<p class="empty-state">No field notes are available yet.</p>
 			)}
 			<div class="home-stream-tags">
-				<a class="tag-pill" href="/tags/field-notes" data-astro-prefetch="viewport">Field Notes</a>
-				<a class="home-updates__more-link" href="/field-notes" data-astro-prefetch="viewport">Read more field notes <span aria-hidden="true">→</span></a>
+				<a class="tag-pill" href="/tags/field-notes">Field Notes</a>
+				<a class="home-updates__more-link" href="/field-notes">Read more field notes <span aria-hidden="true">→</span></a>
 			</div>
 		</section>
 
 		<section class="section-block section-block-track">
 			<div class="section-head">
 				<h2 class="section-title">Latest Track</h2>
-				<a class="home-updates__more-link" href="/media" data-astro-prefetch="viewport">
+				<a class="home-updates__more-link" href="/media">
 					More music <span aria-hidden="true">→</span>
 				</a>
 			</div>
@@ -350,8 +349,6 @@ function getVideoLabel(post: StatusFeedItem) {
 
 	<script>
 		// @ts-nocheck
-		import { prefetch } from "astro:prefetch";
-
 		const carouselRoot = document.querySelector("[data-carousel-root]");
 		const carouselPrev = document.querySelector("[data-carousel-prev]");
 		const carouselNext = document.querySelector("[data-carousel-next]");
@@ -424,19 +421,5 @@ function getVideoLabel(post: StatusFeedItem) {
 			trackObserver.observe(homeTrack, { childList: true, subtree: true });
 		}
 
-		const timer = window.setTimeout(() => {
-			prefetch("/status");
-			prefetch("/gallery");
-			prefetch("/now");
-			prefetch("/media");
-		}, 2000);
-
-		window.addEventListener(
-			"pagehide",
-			() => {
-				window.clearTimeout(timer);
-			},
-			{ once: true },
-		);
 	</script>
 </Base>

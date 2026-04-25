@@ -189,14 +189,14 @@ const languageLinks = [
 
 		<div class:list={["site-shell", hasSidebar && "site-shell--with-sidebar"]}>
 			<header class="site-header h-card">
-				<a class="site-header-avatar-link u-url u-uid exclude" href={localizePath("/", currentLocale)} data-astro-prefetch="hover">
+				<a class="site-header-avatar-link u-url u-uid exclude" href={localizePath("/", currentLocale)}>
 					<img class="avatar u-photo" src={profile.avatarUrl} alt={profile.displayName} />
 				</a>
 
 				<div class="site-header-copy">
 					<div class="site-title-row">
 						<div class="site-title p-name">
-							<a class="u-url exclude" href={localizePath("/", currentLocale)} data-astro-prefetch="hover">
+							<a class="u-url exclude" href={localizePath("/", currentLocale)}>
 								<span class="site-title__name">{siteTitle}</span>
 							</a>
 						</div>
@@ -211,7 +211,6 @@ const languageLinks = [
 											class="site-nav-item"
 											href={localizePath(link.href, currentLocale)}
 											aria-current={isActive(link.href) ? "page" : undefined}
-											data-astro-prefetch="hover"
 											target={link.target || undefined}
 											rel={link.target === "_blank" ? "noreferrer" : undefined}
 										>
@@ -237,7 +236,6 @@ const languageLinks = [
 													href={localizePath(link.href, currentLocale)}
 													role="menuitem"
 													aria-current={isActive(link.href) ? "page" : undefined}
-													data-astro-prefetch="hover"
 													target={link.target || undefined}
 													rel={link.target === "_blank" ? "noreferrer" : undefined}
 												>

@@ -13,9 +13,7 @@ export default defineConfig({
 	site: "https://afterword.blog",
 	output: "server",
 	adapter: cloudflare(),
-	prefetch: {
-		prefetchAll: false,
-	},
+	prefetch: false,
 	i18n: {
 		defaultLocale: "en",
 		locales: ["en", "it"],
