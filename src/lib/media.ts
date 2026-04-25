@@ -171,9 +171,17 @@ function getMediaApiBaseUrl() {
 		.replace(/\/media\/timeline\.json$/i, "");
 }
 
+function resolveSyncMediaUrl(value: string | null | undefined) {
+	const normalized = normalizeString(value);
+	if (!normalized) return null;
+	if (!normalized.startsWith("/")) return normalized;
+	return `${getMediaApiBaseUrl()}${normalized}`;
+}
+
 function hydrateAlbumEntry(entry: SerializedAlbumEntry): AlbumEntry {
 	return {
 		...entry,
+		coverImage: resolveSyncMediaUrl(entry.coverImage),
 		publishedAt: new Date(entry.publishedAt),
 	};
 }
@@ -181,6 +189,7 @@ function hydrateAlbumEntry(entry: SerializedAlbumEntry): AlbumEntry {
 function hydrateTrackEntry(entry: SerializedTrackEntry): TrackEntry {
 	return {
 		...entry,
+		artworkUrl: resolveSyncMediaUrl(entry.artworkUrl),
 		publishedAt: new Date(entry.publishedAt),
 	};
 }
@@ -194,6 +203,9 @@ function hydratePopfeedItem(item: SerializedPopfeedItem): PopfeedItem {
 		completedAt: normalizeOptionalDate(item.completedAt),
 		releaseDate: normalizeOptionalDate(item.releaseDate),
 		date: new Date(item.date),
+		posterImage: resolveSyncMediaUrl(item.posterImage),
+		sourcePosterImage: resolveSyncMediaUrl(item.sourcePosterImage),
+		backdropUrl: resolveSyncMediaUrl(item.backdropUrl),
 	};
 }
 
@@ -370,7 +382,12 @@ async function fetchMediaTimelinePageFromApi({
 
 		const payload = (await response.json()) as Partial<MediaTimelinePageResponse>;
 		const page: MediaTimelinePageResponse = {
-			items: Array.isArray(payload.items) ? (payload.items as MediaTimelineItem[]) : [],
+			items: Array.isArray(payload.items)
+				? (payload.items as MediaTimelineItem[]).map((item) => ({
+						...item,
+						imageUrl: resolveSyncMediaUrl(item.imageUrl),
+				  }))
+				: [],
 			offset: Number.isFinite(payload.offset) ? Number(payload.offset) : normalizedOffset,
 			limit: Number.isFinite(payload.limit) ? Number(payload.limit) : normalizedLimit,
 			total: Number.isFinite(payload.total) ? Number(payload.total) : 0,
