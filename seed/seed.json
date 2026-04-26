@@ -168,17 +168,17 @@
 				{
 					"type": "custom",
 					"label": "About",
-					"url": "/pages/about"
+					"url": "/about"
 				},
 				{
 					"type": "custom",
 					"label": "Hello",
-					"url": "/pages/hello"
+					"url": "/hello"
 				},
 				{
 					"type": "custom",
 					"label": "Colophon",
-					"url": "/pages/colophon"
+					"url": "/colophon"
 				},
 				{
 					"type": "custom",
@@ -537,12 +537,12 @@
 								{
 									"_key": "k9x5",
 									"_type": "link",
-									"href": "/pages/about"
+									"href": "/about"
 								},
 								{
 									"_key": "k9x8",
 									"_type": "link",
-									"href": "/pages/colophon"
+									"href": "/colophon"
 								}
 							],
 							"children": [

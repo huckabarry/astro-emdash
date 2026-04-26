@@ -15,6 +15,7 @@ export default defineConfig({
 	adapter: cloudflare(),
 	prefetch: {
 		prefetchAll: false,
+		defaultStrategy: "hover",
 	},
 	fonts: [
 		{

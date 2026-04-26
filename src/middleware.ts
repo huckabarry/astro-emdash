@@ -2,6 +2,11 @@ import { defineMiddleware } from "astro:middleware";
 
 const SESSION_COOKIE_NAME = "astro-session";
 const PRIMARY_HOSTNAME = "afterword.blog";
+const CANONICAL_PAGE_ROUTES = new Map([
+	["about", "/about"],
+	["hello", "/hello"],
+	["colophon", "/colophon"],
+]);
 
 function hasSessionCookie(cookieHeader: string | null): boolean {
 	if (!cookieHeader) return false;
@@ -15,6 +20,17 @@ function hasSessionCookie(cookieHeader: string | null): boolean {
 export const onRequest = defineMiddleware(async (context, next) => {
 	const { pathname, origin, protocol, hostname, search } = context.url;
 	const hasSession = hasSessionCookie(context.request.headers.get("cookie"));
+
+	const pageAliasMatch = pathname.match(/^\/(?:(it)\/)?pages\/([^/]+)$/);
+	if (pageAliasMatch) {
+		const [, locale, slug] = pageAliasMatch;
+		const canonical = CANONICAL_PAGE_ROUTES.get(slug);
+		if (canonical) {
+			const targetPath = locale ? `/it${canonical}` : canonical;
+			const target = new URL(`${targetPath}${search}`, origin);
+			return context.redirect(target.toString(), 301);
+		}
+	}
 
 	// Ensure WebAuthn/passkeys can work by forcing HTTPS for human traffic.
 	// (We allow plain HTTP for ACME challenge probes.)
