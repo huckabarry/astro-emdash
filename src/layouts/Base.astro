@@ -6,6 +6,7 @@ import {
 	EmDashBodyEnd,
 } from "emdash/ui";
 import { createPublicPageContext } from "emdash/page";
+import { Font } from "astro:assets";
 import WidgetRenderer from "../components/WidgetRenderer.astro";
 import { localizePath, navLabel, normalizeLocale } from "../lib/locale";
 import "../styles/theme.css";
@@ -169,12 +170,8 @@ const languageLinks = [
 		<title>{fullTitle}</title>
 		<link rel="icon" href={profile.avatarUrl} />
 		<link rel="apple-touch-icon" href={profile.avatarUrl} />
-		<link rel="preload" href="/fonts/fira-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
-		<link rel="preload" href="/fonts/fira-sans-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
-		<link rel="preload" href="/fonts/fira-sans-latin-800-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
-		<link rel="preload" href="/fonts/ibm-plex-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
-		<link rel="preload" href="/fonts/ibm-plex-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
-		<link rel="preload" href="/fonts/ibm-plex-mono-latin-500-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+		<Font cssVariable="--font-sans" />
+		<Font cssVariable="--font-mono" />
 		<script
 			is:inline
 			defer
@@ -189,14 +186,14 @@ const languageLinks = [
 
 		<div class:list={["site-shell", hasSidebar && "site-shell--with-sidebar"]}>
 			<header class="site-header h-card">
-				<a class="site-header-avatar-link u-url u-uid exclude" href={localizePath("/", currentLocale)}>
+				<a class="site-header-avatar-link u-url u-uid exclude" href={localizePath("/", currentLocale)} data-astro-prefetch="hover">
 					<img class="avatar u-photo" src={profile.avatarUrl} alt={profile.displayName} />
 				</a>
 
 				<div class="site-header-copy">
 					<div class="site-title-row">
 						<div class="site-title p-name">
-							<a class="u-url exclude" href={localizePath("/", currentLocale)}>
+							<a class="u-url exclude" href={localizePath("/", currentLocale)} data-astro-prefetch="hover">
 								<span class="site-title__name">{siteTitle}</span>
 							</a>
 						</div>
@@ -211,6 +208,7 @@ const languageLinks = [
 											class="site-nav-item"
 											href={localizePath(link.href, currentLocale)}
 											aria-current={isActive(link.href) ? "page" : undefined}
+											data-astro-prefetch="hover"
 											target={link.target || undefined}
 											rel={link.target === "_blank" ? "noreferrer" : undefined}
 										>
@@ -236,6 +234,7 @@ const languageLinks = [
 													href={localizePath(link.href, currentLocale)}
 													role="menuitem"
 													aria-current={isActive(link.href) ? "page" : undefined}
+													data-astro-prefetch="hover"
 													target={link.target || undefined}
 													rel={link.target === "_blank" ? "noreferrer" : undefined}
 												>

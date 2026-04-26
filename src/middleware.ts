@@ -29,12 +29,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
 		return context.redirect(target.toString(), 302);
 	}
 
-	if (context.request.method === "GET" && pathname.startsWith("/fonts/")) {
-		const response = await next();
-		response.headers.set("Cache-Control", "public, max-age=31536000");
-		return response;
-	}
-
 	if (pathname === "/_emdash/api/auth/me" && !hasSession) {
 		return Response.json(
 			{ error: { code: "NOT_AUTHENTICATED", message: "Not authenticated" } },
