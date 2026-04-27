@@ -7,6 +7,7 @@ import {
 } from "emdash/ui";
 import { createPublicPageContext } from "emdash/page";
 import { Font } from "astro:assets";
+import { ClientRouter } from "astro:transitions";
 import WidgetRenderer from "../components/WidgetRenderer.astro";
 import { localizePath, navLabel, normalizeLocale } from "../lib/locale";
 import "../styles/theme.css";
@@ -190,6 +191,7 @@ const languageLinks = [
 		<link rel="apple-touch-icon" href={profile.avatarUrl} />
 		<Font cssVariable="--font-sans" />
 		<Font cssVariable="--font-mono" />
+		<ClientRouter fallback="swap" />
 		<script
 			is:inline
 			defer
