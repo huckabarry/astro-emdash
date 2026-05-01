@@ -1,5 +1,8 @@
 ---
+import { env } from "cloudflare:workers";
 import Base from "../../layouts/Base.astro";
+import { getCheckinsPage, type CheckinItem } from "../../lib/checkins";
+import { getMediaTimelinePage, type MediaTimelineItem } from "../../lib/media";
 import { getStatusFeedPage } from "../../lib/status-feed";
 
 export const prerender = false;
@@ -9,8 +12,40 @@ Astro.response.headers.set(
 	"public, max-age=60, s-maxage=240, stale-while-revalidate=600",
 );
 
-const statusPage = await getStatusFeedPage({ limit: 20, includeReplies: false });
+const [statusPage, checkinsPage, mediaPage] = await Promise.all([
+	getStatusFeedPage({ limit: 18, includeReplies: false }),
+	getCheckinsPage(env as unknown as Record<string, unknown>, { limit: 18 }),
+	getMediaTimelinePage(0, 18),
+]);
+
 const authorAvatarUrl = "/assets/images/status-avatar.jpg";
+
+type StatusItem = (typeof statusPage.statuses)[number];
+
+type MixedFeedEntry =
+	| { kind: "status"; date: Date; status: StatusItem }
+	| { kind: "checkin"; date: Date; checkin: CheckinItem }
+	| { kind: "media"; date: Date; media: MediaTimelineItem };
+
+const mixedFeed: MixedFeedEntry[] = [
+	...statusPage.statuses.map((status) => ({
+		kind: "status" as const,
+		date: status.date,
+		status,
+	})),
+	...checkinsPage.items.map((checkin) => ({
+		kind: "checkin" as const,
+		date: checkin.visitedAt,
+		checkin,
+	})),
+	...mediaPage.items.map((media) => ({
+		kind: "media" as const,
+		date: new Date(media.dateIso),
+		media,
+	})),
+]
+	.sort((left, right) => right.date.getTime() - left.date.getTime())
+	.slice(0, 42);
 
 function formatDate(value: Date) {
 	return new Intl.DateTimeFormat("en-US", {
@@ -20,7 +55,7 @@ function formatDate(value: Date) {
 	}).format(value);
 }
 
-function socialRepostCount(post: (typeof statusPage.statuses)[number]) {
+function socialRepostCount(post: StatusItem) {
 	return (post.repostCount || 0) + (post.quoteCount || 0);
 }
 
@@ -28,559 +63,504 @@ function getLocalStatusPath(slug: string) {
 	return `/status/${slug}`;
 }
 
-function getVideoLabel(post: (typeof statusPage.statuses)[number]) {
+function getVideoLabel(post: StatusItem) {
 	return post.video?.alt?.trim() || "Watch video on Bluesky";
+}
+
+function summarizeCheckin(item: CheckinItem, maxLength = 220) {
+	const source = String(item.excerpt || item.note || "").trim().replace(/\s+/g, " ");
+	if (!source || source.length <= maxLength) return source;
+	return `${source.slice(0, maxLength).trimEnd()}…`;
 }
 ---
 
-<Base title="Status" description="Short updates and passing notes from the Afterword status stream.">
+<Base
+	title="Status"
+	description="A mixed live stream from Afterword: Bluesky posts, check-ins, and media entries in one place."
+>
 	<section class="stream-head">
-		<h1 class="stream-head__title">Status Updates</h1>
+		<h1 class="stream-head__title">Status</h1>
+		<p class="stream-head__lede">
+			Bluesky posts, check-ins, and media notes folded into one running stream.
+		</p>
 	</section>
 
-	<section class="status-list" data-status-list>
-		{statusPage.statuses.map((post) => (
-			<article class="status-row h-entry" data-status-row>
-				<div class="status-row__avatar h-card">
-					{post.avatar ? (
-						<img
-							class="u-photo"
-							src={authorAvatarUrl}
-							alt={post.displayName}
-							loading="lazy"
-							decoding="async"
-							width="48"
-							height="48"
-						/>
-					) : null}
-				</div>
-				<div class="status-row__body">
-					{post.replyTo ? (
-						<p class="status-row__reply-context">
-							In reply to
-							<a href={post.replyTo.blueskyUrl} target="_blank" rel="noreferrer">
-								{post.replyTo.displayName || post.replyTo.handle}
-							</a>
-						</p>
-					) : null}
-				<div class="status-row__meta">
-					<div class="status-row__byline">
-						<span class="status-row__name p-author h-card">
-							<span class="p-name">{post.displayName}</span>
-							<span class="u-url" hidden>{post.blueskyUrl}</span>
-						</span>
-						<span class="status-row__handle p-nickname">{post.handle}</span>
-						<span>·</span>
-						<time class="dt-published" datetime={post.date.toISOString()}>
-							{formatDate(post.date)}
+	{mixedFeed.length ? (
+		<section class="mixed-feed" aria-label="Combined live feed">
+			{mixedFeed.map((entry) => (
+				<article class="mixed-feed__entry">
+					<div class="mixed-feed__meta-column">
+						<time class="mixed-feed__date" datetime={entry.date.toISOString()}>
+							{formatDate(entry.date)}
 						</time>
 					</div>
-				</div>
-				<a class="u-url" href={getLocalStatusPath(post.slug)} hidden>{getLocalStatusPath(post.slug)}</a>
-				{post.html ? (
-					<a class="status-row__permalink u-url" href={getLocalStatusPath(post.slug)}>
-						<div class="status-row__content e-content" set:html={post.html}></div>
-					</a>
-				) : null}
-					{post.quotedPost ? (
-						<a class="status-quote" href={post.quotedPost.blueskyUrl} target="_blank" rel="noreferrer">
-							<div class="status-quote__meta">
-								{post.quotedPost.avatar ? (
-									<img
-										class="status-quote__avatar"
-										src={post.quotedPost.avatar}
-										alt={post.quotedPost.displayName}
-										loading="lazy"
-									/>
-								) : null}
-								<div class="status-quote__byline">
-									<strong>{post.quotedPost.displayName}</strong>
-									<span>{post.quotedPost.handle}</span>
-									<span>·</span>
-									<time datetime={post.quotedPost.date.toISOString()}>
-										{formatDate(post.quotedPost.date)}
-									</time>
+
+					<div class="mixed-feed__rail" aria-hidden="true">
+						<span class="mixed-feed__dot"></span>
+					</div>
+
+					<div class="mixed-feed__content">
+						{entry.kind === "status" ? (
+							<div class="mixed-feed__item mixed-feed__item--status">
+								<p class="mixed-feed__kicker">Bluesky</p>
+								<div class="status-row h-entry">
+									<div class="status-row__avatar h-card">
+										{entry.status.avatar ? (
+											<img
+												class="u-photo"
+												src={authorAvatarUrl}
+												alt={entry.status.displayName}
+												loading="lazy"
+												decoding="async"
+												width="48"
+												height="48"
+											/>
+										) : null}
+									</div>
+									<div class="status-row__body">
+										{entry.status.replyTo ? (
+											<p class="status-row__reply-context">
+												In reply to
+												<a href={entry.status.replyTo.blueskyUrl} target="_blank" rel="noreferrer">
+													{entry.status.replyTo.displayName || entry.status.replyTo.handle}
+												</a>
+											</p>
+										) : null}
+										<div class="status-row__meta">
+											<div class="status-row__byline">
+												<span class="status-row__name p-author h-card">
+													<span class="p-name">{entry.status.displayName}</span>
+													<span class="u-url" hidden>{entry.status.blueskyUrl}</span>
+												</span>
+												<span class="status-row__handle p-nickname">{entry.status.handle}</span>
+											</div>
+										</div>
+										<a class="u-url" href={getLocalStatusPath(entry.status.slug)} hidden>
+											{getLocalStatusPath(entry.status.slug)}
+										</a>
+										{entry.status.html ? (
+											<a class="status-row__permalink u-url" href={getLocalStatusPath(entry.status.slug)}>
+												<div class="status-row__content e-content" set:html={entry.status.html}></div>
+											</a>
+										) : null}
+										{entry.status.quotedPost ? (
+											<a class="status-quote" href={entry.status.quotedPost.blueskyUrl} target="_blank" rel="noreferrer">
+												<div class="status-quote__meta">
+													{entry.status.quotedPost.avatar ? (
+														<img
+															class="status-quote__avatar"
+															src={entry.status.quotedPost.avatar}
+															alt={entry.status.quotedPost.displayName}
+															loading="lazy"
+														/>
+													) : null}
+													<div class="status-quote__byline">
+														<strong>{entry.status.quotedPost.displayName}</strong>
+														<span>{entry.status.quotedPost.handle}</span>
+													</div>
+												</div>
+												{entry.status.quotedPost.html ? (
+													<div class="status-quote__content" set:html={entry.status.quotedPost.html}></div>
+												) : null}
+												{entry.status.quotedPost.images.length ? (
+													<div
+														class:list={[
+															"status-row__media",
+															"status-row__media--quoted",
+															entry.status.quotedPost.images.length > 1 && "status-row__media--multi",
+														]}
+													>
+														{entry.status.quotedPost.images.map((image) => (
+															<img src={image.thumb} alt={image.alt || "Quoted post image"} loading="lazy" />
+														))}
+													</div>
+												) : null}
+												{entry.status.quotedPost.external ? (
+													<span class="status-card status-card--quoted">
+														{entry.status.quotedPost.external.thumb ? (
+															<img
+																class="status-card__thumb"
+																src={entry.status.quotedPost.external.thumb}
+																alt={entry.status.quotedPost.external.title || entry.status.quotedPost.external.domain}
+																loading="lazy"
+															/>
+														) : null}
+														<span class="status-card__domain">{entry.status.quotedPost.external.domain}</span>
+														<strong class="status-card__title">{entry.status.quotedPost.external.title}</strong>
+														{entry.status.quotedPost.external.description ? (
+															<span class="status-card__description">
+																{entry.status.quotedPost.external.description}
+															</span>
+														) : null}
+													</span>
+												) : null}
+											</a>
+										) : null}
+										{entry.status.images.length ? (
+											<div
+												class:list={[
+													"status-row__media",
+													entry.status.images.length > 1 && "status-row__media--multi",
+												]}
+											>
+												{entry.status.images.map((image) => (
+													<a class="status-row__image" href={getLocalStatusPath(entry.status.slug)}>
+														<img src={image.thumb} alt={image.alt || "Bluesky image"} loading="lazy" />
+													</a>
+												))}
+											</div>
+										) : null}
+										{entry.status.external ? (
+											<a class="status-card" href={entry.status.external.uri} target="_blank" rel="noreferrer">
+												{entry.status.external.thumb ? (
+													<img
+														class="status-card__thumb"
+														src={entry.status.external.thumb}
+														alt={entry.status.external.title || entry.status.external.domain}
+														loading="lazy"
+													/>
+												) : null}
+												<span class="status-card__domain">{entry.status.external.domain}</span>
+												<strong class="status-card__title">{entry.status.external.title}</strong>
+												{entry.status.external.description ? (
+													<span class="status-card__description">{entry.status.external.description}</span>
+												) : null}
+											</a>
+										) : null}
+										{entry.status.video ? (
+											<a class="status-row__video" href={entry.status.blueskyUrl} target="_blank" rel="noreferrer">
+												{entry.status.video.thumbnail ? (
+													<span class="status-row__video-thumb-wrap">
+														<img
+															class="status-row__video-thumb"
+															src={entry.status.video.thumbnail}
+															alt={getVideoLabel(entry.status)}
+															loading="lazy"
+														/>
+														<span class="status-row__video-badge" aria-hidden="true">Video</span>
+													</span>
+												) : null}
+												<span class="status-row__video-link">{getVideoLabel(entry.status)}</span>
+											</a>
+										) : null}
+										<div class="status-row__actions">
+											<div class="status-row__metrics">
+												<a class="status-row__action" href={getLocalStatusPath(entry.status.slug)}>
+													<span>{entry.status.replyCount}</span>
+												</a>
+												<a class="status-row__action" href={getLocalStatusPath(entry.status.slug)}>
+													<span>{socialRepostCount(entry.status)}</span>
+												</a>
+												<a class="status-row__action" href={getLocalStatusPath(entry.status.slug)}>
+													<span>{entry.status.likeCount}</span>
+												</a>
+											</div>
+											<div class="status-row__reply-pills">
+												<a class="status-row__reply-pill" href={entry.status.blueskyUrl} target="_blank" rel="noreferrer">
+													<span>Reply on Bluesky</span>
+												</a>
+											</div>
+										</div>
+									</div>
 								</div>
 							</div>
-							{post.quotedPost.html ? (
-								<div class="status-quote__content" set:html={post.quotedPost.html}></div>
-							) : null}
-							{post.quotedPost.images.length ? (
-								<div
-									class:list={[
-										"status-row__media",
-										"status-row__media--quoted",
-										post.quotedPost.images.length > 1 && "status-row__media--multi",
-									]}
-								>
-									{post.quotedPost.images.map((image) => (
-										<img src={image.thumb} alt={image.alt || "Quoted post image"} loading="lazy" />
-									))}
+						) : entry.kind === "checkin" ? (
+							<div class="mixed-feed__item mixed-feed__item--checkin">
+								<p class="mixed-feed__kicker">Check-in</p>
+								<article class="mixed-checkin">
+									{entry.checkin.mapPreviewPath ? (
+										<a class="mixed-checkin__map" href={entry.checkin.canonicalPath}>
+											<img
+												class="mixed-checkin__map-image"
+												src={entry.checkin.mapPreviewPath}
+												alt={`Map preview for ${entry.checkin.name}`}
+												loading="lazy"
+												decoding="async"
+												width="640"
+												height="400"
+											/>
+										</a>
+									) : null}
+									<div class="mixed-checkin__body">
+										<h2 class="mixed-feed__title">
+											<a href={entry.checkin.canonicalPath}>{entry.checkin.name}</a>
+										</h2>
+										{entry.checkin.place ? <p class="mixed-checkin__place">{entry.checkin.place}</p> : null}
+										{entry.checkin.venueCategory ? (
+											<p class="mixed-checkin__kicker">{entry.checkin.venueCategory}</p>
+										) : null}
+										{summarizeCheckin(entry.checkin) ? (
+											<p class="mixed-feed__summary">{summarizeCheckin(entry.checkin)}</p>
+										) : null}
+										<div class="mixed-feed__actions">
+											<a class="tag-pill mixed-feed__action" href={entry.checkin.canonicalPath}>Open check-in</a>
+											{entry.checkin.appleMapsUrl ? (
+												<a class="tag-pill mixed-feed__action" href={entry.checkin.appleMapsUrl} target="_blank" rel="noreferrer">
+													Map
+												</a>
+											) : null}
+											{entry.checkin.website ? (
+												<a class="tag-pill mixed-feed__action" href={entry.checkin.website} target="_blank" rel="noreferrer">
+													Website
+												</a>
+											) : null}
+										</div>
+									</div>
+								</article>
+							</div>
+						) : (
+							<div class="mixed-feed__item mixed-feed__item--media">
+								<p class="mixed-feed__kicker">{entry.media.label}</p>
+								<div class:list={["media-entry", !entry.media.imageUrl && "media-entry--text-only"]}>
+									{entry.media.imageUrl ? (
+										<a class="media-entry__cover" href={entry.media.href}>
+											<img
+												src={entry.media.imageUrl}
+												alt={entry.media.imageAlt || entry.media.title}
+												loading="lazy"
+											/>
+										</a>
+									) : null}
+									<div class="media-entry__body">
+										<h2 class="mixed-feed__title">
+											<a href={entry.media.href}>{entry.media.title}</a>
+										</h2>
+										{entry.media.artist ? (
+											<p class="media-entry__credit">{entry.media.artist}</p>
+										) : entry.media.credit ? (
+											<p class="media-entry__credit">{entry.media.credit}</p>
+										) : null}
+										{entry.media.activityLabel ? (
+											<p class="mixed-feed__subtle">Latest update: {entry.media.activityLabel}</p>
+										) : null}
+										{entry.media.summary ? <p class="mixed-feed__summary">{entry.media.summary}</p> : null}
+										{entry.media.audioUrl ? (
+											<div class="mixed-feed__audio">
+												<audio controls preload="none" src={entry.media.audioUrl} aria-label={`Preview ${entry.media.title}`}></audio>
+											</div>
+										) : null}
+										{entry.media.tags.length ? (
+											<div class="mixed-feed__tags">
+												{entry.media.tags.map((tag) => <span class="tag-pill">{tag}</span>)}
+											</div>
+										) : null}
+										{entry.media.links.length ? (
+											<div class="mixed-feed__actions">
+												<a class="tag-pill mixed-feed__action" href={entry.media.href}>Open entry</a>
+												{entry.media.links.map((link) => (
+													<a
+														class="tag-pill mixed-feed__action"
+														href={link.url}
+														target={link.external ? "_blank" : undefined}
+														rel={link.external ? "noreferrer" : undefined}
+													>
+														{link.label}
+													</a>
+												))}
+											</div>
+										) : null}
+									</div>
 								</div>
-							) : null}
-							{post.quotedPost.external ? (
-								<span class="status-card status-card--quoted">
-									{post.quotedPost.external.thumb ? (
-										<img
-											class="status-card__thumb"
-											src={post.quotedPost.external.thumb}
-											alt={post.quotedPost.external.title || post.quotedPost.external.domain}
-											loading="lazy"
-										/>
-									) : null}
-									<span class="status-card__domain">{post.quotedPost.external.domain}</span>
-									<strong class="status-card__title">{post.quotedPost.external.title}</strong>
-									{post.quotedPost.external.description ? (
-										<span class="status-card__description">
-											{post.quotedPost.external.description}
-										</span>
-									) : null}
-								</span>
-							) : null}
-						</a>
-					) : null}
-					{post.images.length ? (
-						<div
-							class:list={[
-								"status-row__media",
-								post.images.length > 1 && "status-row__media--multi",
-							]}
-						>
-							{post.images.map((image) => (
-								<a
-									class="status-row__image"
-									href={getLocalStatusPath(post.slug)}
-								>
-									<img src={image.thumb} alt={image.alt || "Bluesky image"} loading="lazy" />
-								</a>
-							))}
-						</div>
-					) : null}
-					{post.external ? (
-						<a class="status-card" href={post.external.uri} target="_blank" rel="noreferrer">
-							{post.external.thumb ? (
-								<img
-									class="status-card__thumb"
-									src={post.external.thumb}
-									alt={post.external.title || post.external.domain}
-									loading="lazy"
-								/>
-							) : null}
-							<span class="status-card__domain">{post.external.domain}</span>
-							<strong class="status-card__title">{post.external.title}</strong>
-							{post.external.description ? (
-								<span class="status-card__description">{post.external.description}</span>
-							) : null}
-						</a>
-					) : null}
-					{post.video ? (
-						<a class="status-row__video" href={post.blueskyUrl} target="_blank" rel="noreferrer">
-							{post.video.thumbnail ? (
-								<span class="status-row__video-thumb-wrap">
-									<img
-										class="status-row__video-thumb"
-										src={post.video.thumbnail}
-										alt={getVideoLabel(post)}
-										loading="lazy"
-									/>
-									<span class="status-row__video-badge" aria-hidden="true">Video</span>
-								</span>
-							) : null}
-							<span class="status-row__video-link">{getVideoLabel(post)}</span>
-						</a>
-					) : null}
-					<div class="status-row__actions">
-						<div class="status-row__metrics">
-							<a class="status-row__action" href={getLocalStatusPath(post.slug)}>
-								<span class="status-row__icon" aria-hidden="true">
-									<svg viewBox="0 0 24 24" focusable="false">
-										<path d="M6.37 3.93c.53-.51 1.28-.83 2.35-.83h8.03c1.07 0 1.82.32 2.35.83.51.49.83 1.18.83 2.18v5.78c0 1-.32 1.69-.83 2.18-.53.51-1.28.83-2.35.83h-2.84l-4.1 4.1c-.24.24-.49.36-.79.36-.57 0-1.01-.42-1.01-.99V14.9H8.72c-1.07 0-1.82-.32-2.35-.83-.51-.49-.83-1.18-.83-2.18V6.11c0-1 .32-1.69.83-2.18Zm2.35.77c-.72 0-1.05.2-1.25.39-.18.17-.33.45-.33 1.02v5.78c0 .57.15.85.33 1.02.2.19.53.39 1.25.39h1.95v3.07l3.07-3.07h3.03c.72 0 1.05-.2 1.25-.39.18-.17.33-.45.33-1.02V6.11c0-.57-.15-.85-.33-1.02-.2-.19-.53-.39-1.25-.39H8.72Z"></path>
-									</svg>
-								</span>
-								<span>{post.replyCount}</span>
-							</a>
-							<a class="status-row__action" href={getLocalStatusPath(post.slug)}>
-								<span class="status-row__icon" aria-hidden="true">
-									<svg viewBox="0 0 24 24" focusable="false">
-										<path d="M5.05 4.86a.75.75 0 0 1 1.06 0l2.76 2.76a.75.75 0 1 1-1.06 1.06L6.33 7.2v7.05c0 .7.17 1.12.45 1.39.27.27.69.45 1.39.45h5.5a.75.75 0 0 1 0 1.5h-5.5c-1.02 0-1.87-.28-2.45-.86-.58-.58-.89-1.43-.89-2.48V7.2L3.99 8.68a.75.75 0 1 1-1.06-1.06l2.12-2.12Zm13.9 10.46a.75.75 0 0 1 1.06 1.06l-2.76 2.76a.75.75 0 0 1-1.06 0l-2.76-2.76a.75.75 0 1 1 1.06-1.06l1.48 1.48V9.75c0-.7-.17-1.12-.45-1.39-.27-.27-.69-.45-1.39-.45h-5.5a.75.75 0 0 1 0-1.5h5.5c1.02 0 1.87.28 2.45.86.58.58.89 1.43.89 2.48v7.05l1.48-1.48Z"></path>
-									</svg>
-								</span>
-								<span>{socialRepostCount(post)}</span>
-							</a>
-							<a class="status-row__action" href={getLocalStatusPath(post.slug)}>
-								<span class="status-row__icon" aria-hidden="true">
-									<svg viewBox="0 0 24 24" focusable="false">
-										<path d="M16.72 3.8c2.87 0 4.93 2.16 4.93 5.13 0 1.89-.77 3.32-2.08 4.7-1.28 1.35-3.09 2.71-5.17 4.28l-1.89 1.43a.82.82 0 0 1-1 0l-1.89-1.43c-2.08-1.57-3.89-2.93-5.17-4.28-1.31-1.38-2.08-2.81-2.08-4.7 0-2.97 2.06-5.13 4.93-5.13 1.79 0 3.03.89 3.83 1.83.35.41.64.85.87 1.25.23-.4.52-.84.87-1.25.8-.94 2.04-1.83 3.83-1.83Zm0 1.6c-1.19 0-2.02.56-2.61 1.25-.61.71-.96 1.53-1.12 2.03a.82.82 0 0 1-1.56 0c-.16-.5-.51-1.32-1.12-2.03-.59-.69-1.42-1.25-2.61-1.25-1.88 0-3.33 1.38-3.33 3.53 0 1.33.51 2.38 1.64 3.57 1.15 1.21 2.82 2.47 4.94 4.08L12 17.68l1.84-1.39c2.12-1.61 3.79-2.87 4.94-4.08 1.13-1.19 1.64-2.24 1.64-3.57 0-2.15-1.45-3.53-3.33-3.53Z"></path>
-									</svg>
-								</span>
-								<span>{post.likeCount}</span>
-							</a>
-						</div>
-						<div class="status-row__reply-pills">
-							<a class="status-row__reply-pill" href={post.blueskyUrl} target="_blank" rel="noreferrer">
-								<span class="status-row__reply-pill-icon" aria-hidden="true">
-									<svg viewBox="0 0 24 24" focusable="false">
-										<path d="M5.69 4.78c2.35 1.76 4.88 5.33 5.81 7.27.93-1.94 3.46-5.51 5.81-7.27 1.69-1.27 4.43-2.26 4.43.87 0 .63-.36 5.29-.57 6.05-.72 2.66-3.35 3.34-5.69 2.94 4.09.7 5.13 3.04 2.88 5.39-4.27 4.46-6.14-1.12-6.62-2.55-.09-.26-.13-.38-.24-.38s-.15.12-.24.38c-.48 1.43-2.35 7.01-6.62 2.55-2.25-2.35-1.21-4.69 2.88-5.39-2.34.4-4.97-.28-5.69-2.94-.21-.76-.57-5.42-.57-6.05 0-3.13 2.74-2.14 4.43-.87Z"></path>
-									</svg>
-								</span>
-								<span>Reply on Bluesky</span>
-							</a>
-						</div>
+							</div>
+						)}
 					</div>
-				</div>
-			</article>
-		))}
-	</section>
-
-	{statusPage.statuses.length ? (
-		<div class="status-list__footer">
-			<p class="status-list__status" data-status-count>
-				Showing {statusPage.statuses.length} updates
-			</p>
-
-			{statusPage.cursor ? (
-				<div class="status-list__load-more" data-status-observer>
-					<button
-						class="tag-pill status-list__load-button"
-						type="button"
-						data-load-more
-						data-next-cursor={statusPage.cursor}
-						data-page-size={statusPage.limit}
-					>
-						Load older updates
-					</button>
-				</div>
-			) : null}
-
-			<p class="status-list__error" hidden data-load-error></p>
-		</div>
-	) : null}
+				</article>
+			))}
+		</section>
+	) : (
+		<p class="mixed-feed__empty">Nothing has landed here yet.</p>
+	)}
 </Base>
 
-<script is:inline type="application/json" id="status-feed-initial" set:html={JSON.stringify({
-	authorAvatarUrl,
-	pageSize: statusPage.limit,
-})}></script>
-
-<script>
-	// @ts-nocheck
-	const configEl = document.getElementById("status-feed-initial");
-	const list = document.querySelector("[data-status-list]");
-	const loadButton = document.querySelector("[data-load-more]");
-	const loadError = document.querySelector("[data-load-error]");
-	const countNode = document.querySelector("[data-status-count]");
-	const observerTarget = document.querySelector("[data-status-observer]");
-	const config = configEl ? JSON.parse(configEl.textContent || "{}") : {};
-	let statusCount = list ? list.querySelectorAll("[data-status-row]").length : 0;
-	let isLoadingMore = false;
-
-	const resolveAstroCidAttrName = (root) => {
-		if (!(root instanceof Element)) return null;
-		const sample = root.querySelector("article") || root;
-		for (const attr of Array.from(sample.attributes)) {
-			if (attr.name.startsWith("data-astro-cid-")) return attr.name;
-		}
-		return null;
-	};
-
-	const stampAstroCid = (fragment, cidAttrName) => {
-		if (!cidAttrName || !fragment?.querySelectorAll) return;
-		for (const node of Array.from(fragment.querySelectorAll("*"))) {
-			if (node instanceof Element) node.setAttribute(cidAttrName, "");
-		}
-	};
-
-	const cidAttrName = list instanceof HTMLElement ? resolveAstroCidAttrName(list) : null;
-
-	const formatDate = (value) =>
-		new Intl.DateTimeFormat("en-US", {
-			month: "short",
-			day: "numeric",
-			year: "numeric",
-		}).format(new Date(value));
-
-	const socialRepostCount = (post) => Number(post.repostCount || 0) + Number(post.quoteCount || 0);
-
-	const escapeHtml = (value) =>
-		String(value || "")
-			.replace(/&/g, "&amp;")
-			.replace(/</g, "&lt;")
-			.replace(/>/g, "&gt;")
-			.replace(/\"/g, "&quot;")
-			.replace(/'/g, "&#39;");
-
-	const statusActionIcons = {
-		reply:
-			'<svg viewBox="0 0 24 24" focusable="false"><path d="M6.37 3.93c.53-.51 1.28-.83 2.35-.83h8.03c1.07 0 1.82.32 2.35.83.51.49.83 1.18.83 2.18v5.78c0 1-.32 1.69-.83 2.18-.53.51-1.28.83-2.35.83h-2.84l-4.1 4.1c-.24.24-.49.36-.79.36-.57 0-1.01-.42-1.01-.99V14.9H8.72c-1.07 0-1.82-.32-2.35-.83-.51-.49-.83-1.18-.83-2.18V6.11c0-1 .32-1.69.83-2.18Zm2.35.77c-.72 0-1.05.2-1.25.39-.18.17-.33.45-.33 1.02v5.78c0 .57.15.85.33 1.02.2.19.53.39 1.25.39h1.95v3.07l3.07-3.07h3.03c.72 0 1.05-.2 1.25-.39.18-.17.33-.45.33-1.02V6.11c0-.57-.15-.85-.33-1.02-.2-.19-.53-.39-1.25-.39H8.72Z"></path></svg>',
-		repost:
-			'<svg viewBox="0 0 24 24" focusable="false"><path d="M5.05 4.86a.75.75 0 0 1 1.06 0l2.76 2.76a.75.75 0 1 1-1.06 1.06L6.33 7.2v7.05c0 .7.17 1.12.45 1.39.27.27.69.45 1.39.45h5.5a.75.75 0 0 1 0 1.5h-5.5c-1.02 0-1.87-.28-2.45-.86-.58-.58-.89-1.43-.89-2.48V7.2L3.99 8.68a.75.75 0 1 1-1.06-1.06l2.12-2.12Zm13.9 10.46a.75.75 0 0 1 1.06 1.06l-2.76 2.76a.75.75 0 0 1-1.06 0l-2.76-2.76a.75.75 0 1 1 1.06-1.06l1.48 1.48V9.75c0-.7-.17-1.12-.45-1.39-.27-.27-.69-.45-1.39-.45h-5.5a.75.75 0 0 1 0-1.5h5.5c1.02 0 1.87.28 2.45.86.58.58.89 1.43.89 2.48v7.05l1.48-1.48Z"></path></svg>',
-		like:
-			'<svg viewBox="0 0 24 24" focusable="false"><path d="M16.72 3.8c2.87 0 4.93 2.16 4.93 5.13 0 1.89-.77 3.32-2.08 4.7-1.28 1.35-3.09 2.71-5.17 4.28l-1.89 1.43a.82.82 0 0 1-1 0l-1.89-1.43c-2.08-1.57-3.89-2.93-5.17-4.28-1.31-1.38-2.08-2.81-2.08-4.7 0-2.97 2.06-5.13 4.93-5.13 1.79 0 3.03.89 3.83 1.83.35.41.64.85.87 1.25.23-.4.52-.84.87-1.25.8-.94 2.04-1.83 3.83-1.83Zm0 1.6c-1.19 0-2.02.56-2.61 1.25-.61.71-.96 1.53-1.12 2.03a.82.82 0 0 1-1.56 0c-.16-.5-.51-1.32-1.12-2.03-.59-.69-1.42-1.25-2.61-1.25-1.88 0-3.33 1.38-3.33 3.53 0 1.33.51 2.38 1.64 3.57 1.15 1.21 2.82 2.47 4.94 4.08L12 17.68l1.84-1.39c2.12-1.61 3.79-2.87 4.94-4.08 1.13-1.19 1.64-2.24 1.64-3.57 0-2.15-1.45-3.53-3.33-3.53Z"></path></svg>',
-		bluesky:
-			'<svg viewBox="0 0 24 24" focusable="false"><path d="M5.69 4.78c2.35 1.76 4.88 5.33 5.81 7.27.93-1.94 3.46-5.51 5.81-7.27 1.69-1.27 4.43-2.26 4.43.87 0 .63-.36 5.29-.57 6.05-.72 2.66-3.35 3.34-5.69 2.94 4.09.7 5.13 3.04 2.88 5.39-4.27 4.46-6.14-1.12-6.62-2.55-.09-.26-.13-.38-.24-.38s-.15.12-.24.38c-.48 1.43-2.35 7.01-6.62 2.55-2.25-2.35-1.21-4.69 2.88-5.39-2.34.4-4.97-.28-5.69-2.94-.21-.76-.57-5.42-.57-6.05 0-3.13 2.74-2.14 4.43-.87Z"></path></svg>',
-	};
-
-	const renderExternalCard = (external, quoted = false) => {
-		if (!external) return "";
-		return `<${quoted ? "span" : "a"} class="status-card${quoted ? " status-card--quoted" : ""}"${
-			quoted ? "" : ` href="${escapeHtml(external.uri)}" target="_blank" rel="noreferrer"`
-		}>
-			${
-				external.thumb
-					? `<img class="status-card__thumb" src="${escapeHtml(external.thumb)}" alt="${escapeHtml(
-							external.title || external.domain,
-						)}" loading="lazy" />`
-					: ""
-			}
-			<span class="status-card__domain">${escapeHtml(external.domain)}</span>
-			<strong class="status-card__title">${escapeHtml(external.title)}</strong>
-			${
-				external.description
-					? `<span class="status-card__description">${escapeHtml(external.description)}</span>`
-					: ""
-			}
-		</${quoted ? "span" : "a"}>`;
-	};
-
-	const renderVideoCard = (post) => {
-		if (!post?.video) return "";
-		const label = escapeHtml(post.video.alt || "Watch video on Bluesky");
-		const thumb = post.video.thumbnail
-			? `<span class="status-row__video-thumb-wrap">
-				<img class="status-row__video-thumb" src="${escapeHtml(post.video.thumbnail)}" alt="${label}" loading="lazy" />
-				<span class="status-row__video-badge" aria-hidden="true">Video</span>
-			</span>`
-			: "";
-		return `<a class="status-row__video" href="${escapeHtml(post.blueskyUrl)}" target="_blank" rel="noreferrer">
-			${thumb}
-			<span class="status-row__video-link">${label}</span>
-		</a>`;
-	};
-
-	const renderMedia = (images, options = {}) => {
-		const { quoted = false, href = "" } = options;
-		if (!images?.length) return "";
-		return `<div class="status-row__media${quoted ? " status-row__media--quoted" : ""}${
-			images.length > 1 ? " status-row__media--multi" : ""
-		}">
-			${images
-				.map((image) =>
-					quoted
-						? `<img src="${escapeHtml(image.thumb)}" alt="${escapeHtml(image.alt || "Quoted post image")}" loading="lazy" />`
-						: `<a class="status-row__image" href="${escapeHtml(href)}"><img src="${escapeHtml(image.thumb)}" alt="${escapeHtml(image.alt || "Bluesky image")}" loading="lazy" /></a>`,
-				)
-				.join("")}
-		</div>`;
-	};
-
-	const renderQuotedPost = (quotedPost) => {
-		if (!quotedPost) return "";
-		return `<a class="status-quote" href="${escapeHtml(quotedPost.blueskyUrl)}" target="_blank" rel="noreferrer">
-			<div class="status-quote__meta">
-				${
-					quotedPost.avatar
-						? `<img class="status-quote__avatar" src="${escapeHtml(quotedPost.avatar)}" alt="${escapeHtml(quotedPost.displayName)}" loading="lazy" />`
-						: ""
-				}
-				<div class="status-quote__byline">
-					<strong>${escapeHtml(quotedPost.displayName)}</strong>
-					<span>${escapeHtml(quotedPost.handle)}</span>
-					<span>·</span>
-					<time datetime="${new Date(quotedPost.date).toISOString()}">${formatDate(quotedPost.date)}</time>
-				</div>
-			</div>
-			${quotedPost.html ? `<div class="status-quote__content">${quotedPost.html}</div>` : ""}
-			${renderMedia(quotedPost.images, { quoted: true })}
-			${renderExternalCard(quotedPost.external, true)}
-		</a>`;
-	};
-
-	const renderStatusRow = (post) => `<article class="status-row h-entry" data-status-row>
-		<div class="status-row__avatar h-card">
-			${
-				post.avatar
-					? `<img class="u-photo" src="${escapeHtml(config.authorAvatarUrl || "/assets/images/status-avatar.jpg")}" alt="${escapeHtml(post.displayName)}" loading="lazy" decoding="async" width="48" height="48" />`
-					: ""
-			}
-		</div>
-		<div class="status-row__body">
-			${
-				post.replyTo
-					? `<p class="status-row__reply-context">In reply to <a href="${escapeHtml(post.replyTo.blueskyUrl)}" target="_blank" rel="noreferrer">${escapeHtml(post.replyTo.displayName || post.replyTo.handle)}</a></p>`
-					: ""
-			}
-			<div class="status-row__meta">
-				<div class="status-row__byline">
-					<span class="status-row__name p-author h-card">
-						<span class="p-name">${escapeHtml(post.displayName)}</span>
-						<span class="u-url" hidden>${escapeHtml(post.blueskyUrl)}</span>
-					</span>
-					<span class="status-row__handle p-nickname">${escapeHtml(post.handle)}</span>
-					<span>·</span>
-					<time class="dt-published" datetime="${new Date(post.date).toISOString()}">${formatDate(post.date)}</time>
-				</div>
-			</div>
-			<a class="u-url" href="/status/${encodeURIComponent(post.slug || "")}" hidden>/status/${escapeHtml(post.slug || "")}</a>
-			${
-				post.html
-					? `<a class="status-row__permalink u-url" href="/status/${encodeURIComponent(post.slug || "")}"><div class="status-row__content e-content">${post.html}</div></a>`
-					: ""
-			}
-			${renderQuotedPost(post.quotedPost)}
-			${renderMedia(post.images, { href: `/status/${encodeURIComponent(post.slug || "")}` })}
-			${renderExternalCard(post.external)}
-			${renderVideoCard(post)}
-			<div class="status-row__actions">
-				<div class="status-row__metrics">
-					<a class="status-row__action" href="/status/${encodeURIComponent(post.slug || "")}"><span class="status-row__icon" aria-hidden="true">${statusActionIcons.reply}</span><span>${Number(post.replyCount || 0)}</span></a>
-					<a class="status-row__action" href="/status/${encodeURIComponent(post.slug || "")}"><span class="status-row__icon" aria-hidden="true">${statusActionIcons.repost}</span><span>${socialRepostCount(post)}</span></a>
-					<a class="status-row__action" href="/status/${encodeURIComponent(post.slug || "")}"><span class="status-row__icon" aria-hidden="true">${statusActionIcons.like}</span><span>${Number(post.likeCount || 0)}</span></a>
-				</div>
-				<div class="status-row__reply-pills">
-					<a class="status-row__reply-pill" href="${escapeHtml(post.blueskyUrl)}" target="_blank" rel="noreferrer"><span class="status-row__reply-pill-icon" aria-hidden="true">${statusActionIcons.bluesky}</span><span>Reply on Bluesky</span></a>
-				</div>
-			</div>
-		</div>
-	</article>`;
-
-	const updateCount = () => {
-		if (countNode) {
-			countNode.textContent = `Showing ${statusCount} updates`;
-		}
-	};
-
-	const loadMore = async () => {
-		if (!loadButton || isLoadingMore) return;
-		const nextCursor = loadButton.dataset.nextCursor;
-		const pageSize = loadButton.dataset.pageSize || String(config.pageSize || 20);
-		if (!nextCursor) return;
-
-		isLoadingMore = true;
-		if (loadError) {
-			loadError.hidden = true;
-			loadError.textContent = "";
-		}
-		loadButton.disabled = true;
-		loadButton.textContent = "Loading more…";
-
-		try {
-			const response = await fetch(
-				`/status/feed.json?cursor=${encodeURIComponent(nextCursor)}&limit=${encodeURIComponent(pageSize)}`,
-			);
-			if (!response.ok) {
-				throw new Error(`Status request failed with ${response.status}`);
-			}
-
-			const page = await response.json();
-			const statuses = Array.isArray(page.statuses) ? page.statuses : [];
-			if (list && statuses.length) {
-				const markup = statuses.map((post) => renderStatusRow(post)).join("");
-				const template = document.createElement("template");
-				template.innerHTML = markup;
-				stampAstroCid(template.content, cidAttrName);
-				list.appendChild(template.content);
-				statusCount += statuses.length;
-				updateCount();
-			}
-
-			if (page.cursor) {
-				loadButton.dataset.nextCursor = page.cursor;
-				loadButton.disabled = false;
-				loadButton.textContent = "Load older updates";
-			} else {
-				observerTarget?.remove();
-			}
-		} catch (error) {
-			if (loadError) {
-				loadError.hidden = false;
-				loadError.textContent =
-					error instanceof Error ? error.message : "Unable to load more status updates.";
-			}
-			loadButton.disabled = false;
-			loadButton.textContent = "Load older updates";
-		} finally {
-			isLoadingMore = false;
-		}
-	};
-
-	if (loadButton) {
-		loadButton.addEventListener("click", () => void loadMore());
-
-		if (observerTarget && typeof IntersectionObserver !== "undefined") {
-			const observer = new IntersectionObserver(
-				(entries) => {
-					if (entries.some((entry) => entry.isIntersecting)) {
-						void loadMore();
-					}
-				},
-				{ rootMargin: "320px 0px" },
-			);
-
-			observer.observe(observerTarget);
-		}
-	}
-</script>
-
 <style>
-	.status-row__video {
-		display: grid;
-		gap: 0.55rem;
-		text-decoration: none;
+	.stream-head {
+		margin-bottom: 1.25rem;
 	}
 
-	.status-row__video-thumb-wrap {
-		position: relative;
-		display: block;
+	.stream-head__title {
+		margin: 0;
 	}
 
-	.status-row__video-thumb {
-		display: block;
-		width: 100%;
-		max-height: 38rem;
-		border-radius: 12px;
-		background: #0f1216;
-		object-fit: cover;
-	}
-
-	.status-row__video-badge {
-		position: absolute;
-		right: 0.75rem;
-		bottom: 0.75rem;
-		padding: 0.2rem 0.55rem;
-		border-radius: 999px;
-		background: rgba(15, 18, 22, 0.82);
-		color: #fff;
-		font-size: 0.78rem;
-		font-weight: 600;
-	}
-
-	.status-row__video-link {
-		font-size: 0.92rem;
+	.stream-head__lede {
+		margin: 0.55rem 0 0;
+		max-width: 42rem;
 		color: var(--muted);
 	}
 
-	.status-row__video-link:hover {
-		color: var(--text);
-	}
-
-	.status-list__footer {
+	.mixed-feed {
 		display: grid;
-		gap: 0.75rem;
-		padding-top: 1.5rem;
+		gap: 0;
 	}
 
-	.status-list__status,
-	.status-list__error {
+	.mixed-feed__entry {
+		display: grid;
+		grid-template-columns: minmax(4.6rem, 5.4rem) 1.1rem minmax(0, 1fr);
+		gap: 0 1rem;
+		padding: 1.1rem 0;
+		border-top: 1px solid var(--border);
+	}
+
+	.mixed-feed__entry:first-child {
+		padding-top: 0;
+		border-top: 0;
+	}
+
+	.mixed-feed__meta-column {
+		padding-top: 0.15rem;
+	}
+
+	.mixed-feed__date {
+		display: inline-block;
+		color: var(--accent);
+		font-size: 0.78rem;
+		line-height: 1.35;
+		text-decoration: none;
+	}
+
+	.mixed-feed__rail {
+		position: relative;
+	}
+
+	.mixed-feed__rail::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		bottom: -1.1rem;
+		left: 50%;
+		width: 1px;
+		background: color-mix(in srgb, var(--border) 80%, transparent);
+		transform: translateX(-50%);
+	}
+
+	.mixed-feed__entry:last-child .mixed-feed__rail::before {
+		bottom: 0;
+	}
+
+	.mixed-feed__dot {
+		position: absolute;
+		top: 0.3rem;
+		left: 50%;
+		width: 0.55rem;
+		height: 0.55rem;
+		border-radius: 999px;
+		background: var(--accent);
+		transform: translateX(-50%);
+	}
+
+	.mixed-feed__content {
+		min-width: 0;
+	}
+
+	.mixed-feed__item {
+		min-width: 0;
+	}
+
+	.mixed-feed__kicker,
+	.mixed-checkin__kicker,
+	.mixed-feed__subtle {
+		margin: 0 0 0.5rem;
+		color: var(--muted);
+		font-size: 0.8rem;
+		line-height: 1.35;
+	}
+
+	.mixed-feed__kicker,
+	.mixed-checkin__kicker {
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+	}
+
+	.mixed-feed__title {
+		margin: 0;
+		font-size: clamp(1.15rem, 1.35vw, 1.45rem);
+		line-height: 1.12;
+		color: #fff;
+	}
+
+	.mixed-feed__title a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.mixed-feed__summary {
+		margin: 0.55rem 0 0;
+		color: var(--muted);
+		line-height: 1.6;
+	}
+
+	.mixed-feed__actions,
+	.mixed-feed__tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-top: 0.8rem;
+	}
+
+	.mixed-feed__audio {
+		margin-top: 0.8rem;
+	}
+
+	.mixed-feed__audio audio {
+		width: 100%;
+		max-width: 20rem;
+	}
+
+	.mixed-checkin {
+		display: grid;
+		grid-template-columns: minmax(10rem, 11rem) minmax(0, 1fr);
+		gap: 1rem;
+		align-items: start;
+	}
+
+	.mixed-checkin__map {
+		display: block;
+		overflow: hidden;
+		border-radius: 1rem;
+		background: color-mix(in srgb, var(--surface) 82%, white 18%);
+		aspect-ratio: 1 / 1;
+	}
+
+	.mixed-checkin__map-image {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	.mixed-checkin__body {
+		min-width: 0;
+	}
+
+	.mixed-checkin__place {
+		margin: 0.45rem 0 0;
+		color: #d7d8d4;
+	}
+
+	.mixed-feed__empty {
 		margin: 0;
 		color: var(--muted);
 	}
 
-	.status-list__load-more {
-		display: flex;
-	}
+	@media (max-width: 720px) {
+		.mixed-feed__entry {
+			grid-template-columns: 1fr;
+			gap: 0.6rem;
+		}
 
-	.status-list__load-button:disabled {
-		cursor: wait;
-		opacity: 0.7;
+		.mixed-feed__meta-column {
+			padding-top: 0;
+		}
+
+		.mixed-feed__rail {
+			display: none;
+		}
+
+		.mixed-checkin {
+			grid-template-columns: 1fr;
+		}
+
+		.mixed-checkin__map {
+			display: none;
+		}
 	}
 </style>
