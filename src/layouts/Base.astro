@@ -63,21 +63,14 @@ const profile = {
 	verificationLinks: [{ label: "Bluesky", url: `https://bsky.app/profile/${atprotoProfileHandle}` }],
 };
 const fullTitle = title.includes(siteTitle) ? title : `${title} | ${siteTitle}`;
-const isLoggedIn = !!Astro.locals.user;
 const fallbackPrimaryNavLinks: Array<{ href: string; labelKey: string; target?: string | null }> = [
 	{ href: "/", labelKey: "home" },
 	{ href: "/status", labelKey: "status" },
 	{ href: "/gallery", labelKey: "gallery" },
 	{ href: "/about", labelKey: "about" },
 ];
-const fallbackSecondaryNavLinks: Array<{ href: string; labelKey: string; target?: string | null }> = [
-	{ href: "/hello", labelKey: "hello" },
-	{ href: "/check-ins", labelKey: "checkins" },
-	{ href: "/media", labelKey: "media" },
-	{ href: "/colophon", labelKey: "colophon" },
-	{ href: "/subscribe", labelKey: "subscribe" },
-];
 const footerNavLinks = [
+	{ href: "/hello", labelKey: "hello" },
 	{ href: "/about", labelKey: "about" },
 	{ href: "/colophon", labelKey: "colophon" },
 	{ href: "/subscribe", labelKey: "subscribe" },
@@ -85,7 +78,7 @@ const footerNavLinks = [
 const footerWidgetArea = await getWidgetArea("footer");
 const hasSidebar = typeof sidebar === "boolean" ? sidebar : Astro.slots.has("sidebar");
 const subtitleSection = await getSection("subtitle");
-const [primaryMenu, moreMenu] = await Promise.all([getMenu("primary"), getMenu("more")]);
+const primaryMenu = await getMenu("primary");
 
 const pageCtx = createPublicPageContext({
 	Astro,
@@ -144,8 +137,6 @@ function portableTextPlainText(value: unknown) {
 const subtitleText = portableTextPlainText(subtitleSection?.content) ?? null;
 const currentLocale = normalizeLocale(Astro.currentLocale);
 const prefetchMode = "hover";
-const hiddenMenuHrefs = new Set(["/check-ins", "/media"]);
-const shouldHideMenuLink = (href: string) => hiddenMenuHrefs.has(normalizeMenuHref(href));
 const primaryNavLinks: NavLink[] = primaryMenu?.items?.length
 	? primaryMenu.items.map((item) => ({
 			href: normalizeMenuHref(item.url),
@@ -157,17 +148,6 @@ const primaryNavLinks: NavLink[] = primaryMenu?.items?.length
 			label: navLabel(item.labelKey, currentLocale),
 			target: item.target ?? null,
 	  }));
-const secondaryNavLinks: NavLink[] = moreMenu?.items?.length
-	? moreMenu.items.map((item) => ({
-			href: normalizeMenuHref(item.url),
-			label: item.label,
-			target: item.target,
-	  })).filter((item) => !shouldHideMenuLink(item.href))
-	: fallbackSecondaryNavLinks.map((item) => ({
-			href: item.href,
-			label: navLabel(item.labelKey, currentLocale),
-			target: item.target ?? null,
-	  })).filter((item) => !shouldHideMenuLink(item.href));
 const localizedFooterNavLinks = footerNavLinks.map((item) => ({
 	href: localizePath(item.href, currentLocale),
 	label: navLabel(item.labelKey, currentLocale),
@@ -238,39 +218,6 @@ const languageLinks = [
 										</a>
 									</li>
 								))}
-								<li class="site-nav-list-item site-nav-list-item--menu">
-									<div class="site-nav-menu">
-										<button
-											class="site-nav-item site-nav-menu__button"
-											type="button"
-											aria-haspopup="menu"
-											aria-expanded="false"
-											data-nav-menu-button
-										>
-											{navLabel("menu", currentLocale)}
-										</button>
-										<div class="site-nav-menu__panel" role="menu" aria-label={navLabel("morePages", currentLocale)} hidden data-nav-menu-panel>
-											{secondaryNavLinks.map((link) => (
-												<a
-													class="site-nav-menu__link"
-													href={localizePath(link.href, currentLocale)}
-													role="menuitem"
-													aria-current={isActive(link.href) ? "page" : undefined}
-													data-astro-prefetch={prefetchMode}
-													target={link.target || undefined}
-													rel={link.target === "_blank" ? "noreferrer" : undefined}
-												>
-													{link.label}
-												</a>
-											))}
-											{isLoggedIn && (
-												<a class="site-nav-menu__link" href="/_emdash/admin" role="menuitem">
-													Admin
-												</a>
-											)}
-										</div>
-									</div>
-								</li>
 							</ul>
 						</nav>
 					</div>
@@ -325,87 +272,6 @@ const languageLinks = [
 			</footer>
 		</div>
 
-		<script is:inline>
-			(() => {
-				const menuState = window.__afterwordNavMenu ??= {
-					initialized: false,
-					open: false,
-				};
-
-				function getNavMenuRefs() {
-					return {
-						navButton: document.querySelector("[data-nav-menu-button]"),
-						navPanel: document.querySelector("[data-nav-menu-panel]"),
-					};
-				}
-
-				function syncNavMenu() {
-					const { navButton, navPanel } = getNavMenuRefs();
-					if (!(navButton instanceof HTMLElement) || !(navPanel instanceof HTMLElement)) {
-						menuState.open = false;
-						return;
-					}
-
-					navButton.setAttribute("aria-expanded", menuState.open ? "true" : "false");
-					if (menuState.open) {
-						navPanel.removeAttribute("hidden");
-					} else {
-						navPanel.setAttribute("hidden", "");
-					}
-				}
-
-				function closeNavMenu() {
-					if (!menuState.open) return;
-					menuState.open = false;
-					syncNavMenu();
-				}
-
-				if (!menuState.initialized) {
-					menuState.initialized = true;
-
-					document.addEventListener("click", (event) => {
-						const target = event.target;
-						if (!(target instanceof Element)) return;
-
-						const { navButton, navPanel } = getNavMenuRefs();
-						if (!(navButton instanceof HTMLElement) || !(navPanel instanceof HTMLElement)) return;
-
-						if (target.closest("[data-nav-menu-button]")) {
-							event.preventDefault();
-							menuState.open = !menuState.open;
-							syncNavMenu();
-							return;
-						}
-
-						if (target.closest("[data-nav-menu-panel] a")) {
-							closeNavMenu();
-							return;
-						}
-
-						if (menuState.open && !navPanel.contains(target) && !navButton.contains(target)) {
-							closeNavMenu();
-						}
-					});
-
-					window.addEventListener("keydown", (event) => {
-						if (event.key === "Escape" && menuState.open) {
-							event.preventDefault();
-							closeNavMenu();
-						}
-					});
-
-					document.addEventListener("astro:before-swap", () => {
-						menuState.open = false;
-					});
-
-					document.addEventListener("astro:page-load", () => {
-						syncNavMenu();
-					});
-				}
-
-				syncNavMenu();
-			})();
-		</script>
 		{Astro.url.pathname === "/" ? (
 			<script is:inline>
 				(() => {

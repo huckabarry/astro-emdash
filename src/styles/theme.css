@@ -200,10 +200,6 @@ p:last-child {
 	min-width: 0;
 }
 
-.site-nav-list-item--menu {
-	position: relative;
-}
-
 .site-nav-item {
 	display: inline-block;
 	padding: 0;
@@ -226,72 +222,6 @@ p:last-child {
 }
 
 .site-nav-item[aria-current='page'] {
-	color: #ffffff;
-}
-
-.site-nav-menu {
-	position: relative;
-}
-
-.site-nav-menu__button {
-	appearance: none;
-	margin: 0;
-	border: 0;
-	padding: 0;
-	background: transparent;
-	color: var(--accent);
-	cursor: pointer;
-	font: inherit;
-	font-style: italic;
-	font-weight: 500;
-	line-height: inherit;
-	vertical-align: baseline;
-	-webkit-tap-highlight-color: transparent;
-}
-
-.site-nav-menu__button:hover,
-.site-nav-menu__button:focus,
-.site-nav-menu__button:focus-visible,
-.site-nav-menu__button:active {
-	color: var(--accent);
-}
-
-.site-nav-menu__button[aria-expanded='true'] {
-	color: #ffffff;
-}
-
-.site-nav-menu__panel {
-	position: absolute;
-	top: calc(100% + 0.55rem);
-	right: -0.8rem;
-	z-index: 2000;
-	display: grid;
-	gap: 0.2rem;
-	min-width: 11.5rem;
-	max-width: calc(100vw - 1.5rem);
-	padding: 0.5rem;
-	border: 1px solid var(--border);
-	border-radius: 0.75rem;
-	background: color-mix(in srgb, var(--surface) 94%, black 6%);
-	box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.3);
-}
-
-.site-nav-menu__link {
-	display: block;
-	padding: 0.45rem 0.55rem;
-	border-radius: 0.45rem;
-	color: var(--text);
-	font-family: var(--font-mono);
-	font-size: 0.9rem;
-	font-style: italic;
-	text-decoration: none;
-	-webkit-tap-highlight-color: transparent;
-}
-
-.site-nav-menu__link:hover,
-.site-nav-menu__link:focus-visible,
-.site-nav-menu__link[aria-current='page'] {
-	background: rgba(255, 255, 255, 0.08);
 	color: #ffffff;
 }
 
@@ -2097,18 +2027,11 @@ h1.entry__title {
 		text-align: left;
 	}
 
-	.site-nav-item,
-	.site-nav-menu__button {
+	.site-nav-item {
 		display: inline-block;
 		width: auto;
 		font-size: 0.96rem;
 		text-align: left;
-	}
-
-	.site-nav-menu__panel {
-		right: -0.35rem;
-		min-width: 10.5rem;
-		max-width: calc(100vw - 1.25rem);
 	}
 
 	.widget-search {
