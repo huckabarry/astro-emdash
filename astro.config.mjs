@@ -26,6 +26,31 @@ export default defineConfig({
 				"@astrojs/cloudflare",
 			],
 		},
+		build: {
+			chunkSizeWarningLimit: 1500,
+			rollupOptions: {
+				output: {
+					manualChunks(id) {
+						if (!id.includes("node_modules")) return;
+
+						if (id.includes("/@tiptap/")) return "vendor-tiptap";
+						if (
+							id.includes("/prosemirror") ||
+							id.includes("/yjs") ||
+							id.includes("/y-protocols") ||
+							id.includes("/@tiptap/y-tiptap")
+						) {
+							return "vendor-collab";
+						}
+						if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/")) {
+							return "vendor-react";
+						}
+						if (id.includes("/echarts/")) return "vendor-echarts";
+						if (id.includes("/leaflet/")) return "vendor-leaflet";
+					},
+				},
+			},
+		},
 	},
 	prefetch: {
 		prefetchAll: false,
