@@ -144,6 +144,8 @@ function portableTextPlainText(value: unknown) {
 const subtitleText = portableTextPlainText(subtitleSection?.content) ?? null;
 const currentLocale = normalizeLocale(Astro.currentLocale);
 const prefetchMode = "hover";
+const hiddenMenuHrefs = new Set(["/check-ins", "/media"]);
+const shouldHideMenuLink = (href: string) => hiddenMenuHrefs.has(normalizeMenuHref(href));
 const primaryNavLinks: NavLink[] = primaryMenu?.items?.length
 	? primaryMenu.items.map((item) => ({
 			href: normalizeMenuHref(item.url),
@@ -160,12 +162,12 @@ const secondaryNavLinks: NavLink[] = moreMenu?.items?.length
 			href: normalizeMenuHref(item.url),
 			label: item.label,
 			target: item.target,
-	  }))
+	  })).filter((item) => !shouldHideMenuLink(item.href))
 	: fallbackSecondaryNavLinks.map((item) => ({
 			href: item.href,
 			label: navLabel(item.labelKey, currentLocale),
 			target: item.target ?? null,
-	  }));
+	  })).filter((item) => !shouldHideMenuLink(item.href));
 const localizedFooterNavLinks = footerNavLinks.map((item) => ({
 	href: localizePath(item.href, currentLocale),
 	label: navLabel(item.labelKey, currentLocale),
