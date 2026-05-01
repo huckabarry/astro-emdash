@@ -325,41 +325,83 @@ const languageLinks = [
 
 		<script is:inline>
 			(() => {
-				const navButton = document.querySelector("[data-nav-menu-button]");
-				const navPanel = document.querySelector("[data-nav-menu-panel]");
-				let navOpen = false;
+				const menuState = window.__afterwordNavMenu ??= {
+					initialized: false,
+					open: false,
+				};
 
-				function closeNavMenu() {
-					navOpen = false;
-					navButton?.setAttribute("aria-expanded", "false");
-					navPanel?.setAttribute("hidden", "");
+				function getNavMenuRefs() {
+					return {
+						navButton: document.querySelector("[data-nav-menu-button]"),
+						navPanel: document.querySelector("[data-nav-menu-panel]"),
+					};
 				}
 
-				navButton?.addEventListener("click", () => {
-					navOpen = !navOpen;
-					navButton.setAttribute("aria-expanded", navOpen ? "true" : "false");
-					if (navOpen) {
-						navPanel?.removeAttribute("hidden");
+				function syncNavMenu() {
+					const { navButton, navPanel } = getNavMenuRefs();
+					if (!(navButton instanceof HTMLElement) || !(navPanel instanceof HTMLElement)) {
+						menuState.open = false;
+						return;
+					}
+
+					navButton.setAttribute("aria-expanded", menuState.open ? "true" : "false");
+					if (menuState.open) {
+						navPanel.removeAttribute("hidden");
 					} else {
-						navPanel?.setAttribute("hidden", "");
+						navPanel.setAttribute("hidden", "");
 					}
-				});
+				}
 
-				window.addEventListener("keydown", (event) => {
-					if (event.key === "Escape" && navOpen) {
-						event.preventDefault();
-						closeNavMenu();
-					}
-				});
+				function closeNavMenu() {
+					if (!menuState.open) return;
+					menuState.open = false;
+					syncNavMenu();
+				}
 
-				window.addEventListener("pointerdown", (event) => {
-					if (navOpen && navPanel && navButton) {
+				if (!menuState.initialized) {
+					menuState.initialized = true;
+
+					document.addEventListener("click", (event) => {
 						const target = event.target;
-						if (target instanceof Node && !navPanel.contains(target) && !navButton.contains(target)) {
+						if (!(target instanceof Element)) return;
+
+						const { navButton, navPanel } = getNavMenuRefs();
+						if (!(navButton instanceof HTMLElement) || !(navPanel instanceof HTMLElement)) return;
+
+						if (target.closest("[data-nav-menu-button]")) {
+							event.preventDefault();
+							menuState.open = !menuState.open;
+							syncNavMenu();
+							return;
+						}
+
+						if (target.closest("[data-nav-menu-panel] a")) {
+							closeNavMenu();
+							return;
+						}
+
+						if (menuState.open && !navPanel.contains(target) && !navButton.contains(target)) {
 							closeNavMenu();
 						}
-					}
-				});
+					});
+
+					window.addEventListener("keydown", (event) => {
+						if (event.key === "Escape" && menuState.open) {
+							event.preventDefault();
+							closeNavMenu();
+						}
+					});
+
+					document.addEventListener("astro:before-swap", () => {
+						menuState.open = false;
+					});
+
+					document.addEventListener("astro:page-load", () => {
+						syncNavMenu();
+					});
+				}
+
+				syncNavMenu();
 			})();
 		</script>
 		{Astro.url.pathname === "/" ? (
