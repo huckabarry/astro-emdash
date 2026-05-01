@@ -18,8 +18,6 @@ const [statusPage, checkinsPage, mediaPage] = await Promise.all([
 	getMediaTimelinePage(0, 18),
 ]);
 
-const authorAvatarUrl = "/assets/images/status-avatar.jpg";
-
 type StatusItem = (typeof statusPage.statuses)[number];
 
 type MixedFeedEntry =
@@ -104,19 +102,6 @@ function summarizeCheckin(item: CheckinItem, maxLength = 220) {
 							<div class="mixed-feed__item mixed-feed__item--status">
 								<p class="mixed-feed__kicker">Bluesky</p>
 								<div class="status-row h-entry">
-									<div class="status-row__avatar h-card">
-										{entry.status.avatar ? (
-											<img
-												class="u-photo"
-												src={authorAvatarUrl}
-												alt={entry.status.displayName}
-												loading="lazy"
-												decoding="async"
-												width="48"
-												height="48"
-											/>
-										) : null}
-									</div>
 									<div class="status-row__body">
 										{entry.status.replyTo ? (
 											<p class="status-row__reply-context">
@@ -453,6 +438,11 @@ function summarizeCheckin(item: CheckinItem, maxLength = 220) {
 
 	.mixed-feed__item {
 		min-width: 0;
+	}
+
+	.mixed-feed__item--status .status-row {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0;
 	}
 
 	.mixed-feed__kicker,
