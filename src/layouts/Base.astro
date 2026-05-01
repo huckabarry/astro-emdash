@@ -54,13 +54,9 @@ const pageRouteAliases = new Map([
 	["hello", "/hello"],
 	["colophon", "/colophon"],
 ]);
-const atprotoProfileHandle =
-	(process.env.STANDARD_SITE_IDENTIFIER || process.env.ATPROTO_IDENTIFIER || "").trim() ||
-	"afterword.blog";
 const profile = {
 	displayName: "Bryan Robb",
 	avatarUrl: "/assets/images/status-avatar.jpg",
-	verificationLinks: [{ label: "Bluesky", url: `https://bsky.app/profile/${atprotoProfileHandle}` }],
 };
 const fullTitle = title.includes(siteTitle) ? title : `${title} | ${siteTitle}`;
 const fallbackPrimaryNavLinks: Array<{ href: string; labelKey: string; target?: string | null }> = [
@@ -260,12 +256,6 @@ const languageLinks = [
 						<>
 							<span class="site-foot-separator">/</span>
 							<a class="site-foot-nav-item" href={link.href}>{link.label}</a>
-						</>
-					))}
-					{profile.verificationLinks.map((link) => (
-						<>
-							<span class="site-foot-separator">/</span>
-							<a class="site-foot-nav-item" href={link.url} target="_blank" rel="noreferrer me">{link.label}</a>
 						</>
 					))}
 				</div>
