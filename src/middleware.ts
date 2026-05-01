@@ -2,6 +2,7 @@ import { defineMiddleware } from "astro:middleware";
 
 const SESSION_COOKIE_NAME = "astro-session";
 const PRIMARY_HOSTNAME = "afterword.blog";
+const LOCAL_HOSTNAMES = new Set(["127.0.0.1", "localhost"]);
 const CANONICAL_PAGE_ROUTES = new Map([
 	["about", "/about"],
 	["hello", "/hello"],
@@ -34,7 +35,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
 	// Ensure WebAuthn/passkeys can work by forcing HTTPS for human traffic.
 	// (We allow plain HTTP for ACME challenge probes.)
-	if (protocol === "http:" && !pathname.startsWith("/.well-known/acme-challenge/")) {
+	if (
+		protocol === "http:" &&
+		!LOCAL_HOSTNAMES.has(hostname) &&
+		!pathname.startsWith("/.well-known/acme-challenge/")
+	) {
 		const httpsUrl = new URL(`https://${hostname}${pathname}${search}`);
 		return context.redirect(httpsUrl.toString(), 301);
 	}

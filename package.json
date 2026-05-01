@@ -18,8 +18,8 @@
 		"typecheck": "astro check"
 	},
 	"dependencies": {
-		"@astrojs/cloudflare": "^13.1.7",
-		"@astrojs/react": "^5.0.3",
+		"@astrojs/cloudflare": "^13.3.0",
+		"@astrojs/react": "^5.0.4",
 		"@emdash-cms/cloudflare": "^0.7.0",
 		"@emdash-cms/plugin-atproto": "^0.1.1",
 		"@emdash-cms/plugin-embeds": "^0.1.6",
@@ -27,7 +27,7 @@
 		"@emdash-cms/plugin-webhook-notifier": "^0.1.2",
 		"@tiptap/extension-collaboration": "^3.22.3",
 		"@tiptap/y-tiptap": "^3.0.3",
-		"astro": "^6.1.4",
+		"astro": "^6.2.1",
 		"emdash": "^0.7.0",
 		"kysely": "^0.27.0",
 		"leaflet": "^1.9.4",

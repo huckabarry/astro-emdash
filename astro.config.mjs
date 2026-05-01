@@ -13,6 +13,20 @@ export default defineConfig({
 	site: "https://afterword.blog",
 	output: "server",
 	adapter: cloudflare(),
+	vite: {
+		optimizeDeps: {
+			exclude: [
+				"emdash",
+				"emdash/astro",
+				"@emdash-cms/cloudflare",
+				"@emdash-cms/plugin-atproto",
+				"@emdash-cms/plugin-embeds",
+				"@emdash-cms/plugin-forms",
+				"@emdash-cms/plugin-webhook-notifier",
+				"@astrojs/cloudflare",
+			],
+		},
+	},
 	prefetch: {
 		prefetchAll: false,
 		defaultStrategy: "hover",
