@@ -351,93 +351,121 @@ function getVideoLabel(post: StatusFeedItem) {
 	<script>
 		// @ts-nocheck
 		import { prefetch } from "astro:prefetch";
+		const homeState = window.__afterwordHome ??= {
+			initialized: false,
+			cleanup() {},
+		};
 
-		const carouselRoot = document.querySelector("[data-carousel-root]");
-		const carouselPrev = document.querySelector("[data-carousel-prev]");
-		const carouselNext = document.querySelector("[data-carousel-next]");
-		const carouselViewport = carouselRoot?.querySelector("[data-carousel-viewport]");
-		const carouselItems = carouselRoot ? Array.from(carouselRoot.querySelectorAll("[data-carousel-item]")) : [];
-		const carouselStep = Number(carouselRoot?.getAttribute("data-carousel-step") || 1);
-		let currentPage = 0;
+		function initHomePage() {
+			homeState.cleanup();
 
-		function syncCarouselHeight() {
-			if (!carouselViewport || !carouselItems.length) return;
-			const visibleItem = carouselItems.find((item) => !item.hasAttribute("hidden"));
-			if (!visibleItem) return;
-			carouselViewport.style.height = `${visibleItem.offsetHeight}px`;
-		}
+			const cleanupFns = [];
+			const carouselRoot = document.querySelector("[data-carousel-root]");
+			const carouselPrev = document.querySelector("[data-carousel-prev]");
+			const carouselNext = document.querySelector("[data-carousel-next]");
+			const carouselViewport = carouselRoot?.querySelector("[data-carousel-viewport]");
+			const carouselItems = carouselRoot ? Array.from(carouselRoot.querySelectorAll("[data-carousel-item]")) : [];
+			const carouselStep = Number(carouselRoot?.getAttribute("data-carousel-step") || 1);
+			const homeTrack = document.querySelector(".home-track");
+			let currentPage = 0;
 
-		function renderCarousel(page) {
-			if (!carouselItems.length) return;
-			const pageCount = Math.max(1, Math.ceil(carouselItems.length / Math.max(carouselStep, 1)));
-			currentPage = ((page % pageCount) + pageCount) % pageCount;
-			const start = currentPage * carouselStep;
-			const end = start + carouselStep;
+			function syncCarouselHeight() {
+				if (!carouselViewport || !carouselItems.length) return;
+				const visibleItem = carouselItems.find((item) => !item.hasAttribute("hidden"));
+				if (!visibleItem) return;
+				carouselViewport.style.height = `${visibleItem.offsetHeight}px`;
+			}
 
-			carouselItems.forEach((item, index) => {
-				item.toggleAttribute("hidden", index < start || index >= end);
-			});
+			function renderCarousel(page) {
+				if (!carouselItems.length) return;
+				const pageCount = Math.max(1, Math.ceil(carouselItems.length / Math.max(carouselStep, 1)));
+				currentPage = ((page % pageCount) + pageCount) % pageCount;
+				const start = currentPage * carouselStep;
+				const end = start + carouselStep;
 
-			window.requestAnimationFrame(syncCarouselHeight);
-		}
+				carouselItems.forEach((item, index) => {
+					item.toggleAttribute("hidden", index < start || index >= end);
+				});
 
-		if (carouselRoot && carouselItems.length) {
-			renderCarousel(0);
-			carouselPrev?.addEventListener("click", () => renderCarousel(currentPage - 1));
-			carouselNext?.addEventListener("click", () => renderCarousel(currentPage + 1));
-			window.addEventListener("resize", syncCarouselHeight, { passive: true });
+				window.requestAnimationFrame(syncCarouselHeight);
+			}
 
-			carouselRoot.querySelectorAll("img").forEach((image) => {
-				if (!image.complete) {
-					image.addEventListener("load", syncCarouselHeight, { once: true });
+			function normalizeHomeTrack() {
+				if (!homeTrack) return;
+				homeTrack.querySelectorAll(".crucial_footer_button").forEach((button) => {
+					button.setAttribute("data-home-track-hidden", "");
+					button.closest("div[style*='text-align:center']")?.setAttribute("data-home-track-hidden", "");
+				});
+
+				homeTrack.querySelectorAll(".crucial_entry").forEach((entry) => {
+					entry.style.background = "transparent";
+					entry.style.padding = "0";
+					entry.style.borderRadius = "0";
+				});
+
+				homeTrack.querySelectorAll(".crucial_container").forEach((container) => {
+					container.style.background = "transparent";
+					container.style.padding = "0";
+					container.style.margin = "0";
+					container.style.maxWidth = "none";
+				});
+			}
+
+			if (carouselRoot && carouselItems.length) {
+				const onPrev = () => renderCarousel(currentPage - 1);
+				const onNext = () => renderCarousel(currentPage + 1);
+				const onResize = () => syncCarouselHeight();
+
+				renderCarousel(0);
+				carouselPrev?.addEventListener("click", onPrev);
+				carouselNext?.addEventListener("click", onNext);
+				window.addEventListener("resize", onResize, { passive: true });
+
+				cleanupFns.push(() => {
+					carouselPrev?.removeEventListener("click", onPrev);
+					carouselNext?.removeEventListener("click", onNext);
+					window.removeEventListener("resize", onResize);
+				});
+
+				carouselRoot.querySelectorAll("img").forEach((image) => {
+					if (!image.complete) {
+						image.addEventListener("load", syncCarouselHeight, { once: true });
+					}
+				});
+			}
+
+			normalizeHomeTrack();
+
+			if (homeTrack) {
+				const trackObserver = new MutationObserver(() => normalizeHomeTrack());
+				trackObserver.observe(homeTrack, { childList: true, subtree: true });
+				cleanupFns.push(() => trackObserver.disconnect());
+			}
+
+			const timer = window.setTimeout(() => {
+				prefetch("/status");
+				prefetch("/gallery");
+				prefetch("/now");
+				prefetch("/media");
+			}, 2000);
+
+			cleanupFns.push(() => window.clearTimeout(timer));
+			homeState.cleanup = () => {
+				while (cleanupFns.length) {
+					const cleanup = cleanupFns.pop();
+					cleanup?.();
 				}
-			});
+			};
 		}
 
-		const homeTrack = document.querySelector(".home-track");
-
-		function normalizeHomeTrack() {
-			if (!homeTrack) return;
-			homeTrack.querySelectorAll(".crucial_footer_button").forEach((button) => {
-				button.setAttribute("data-home-track-hidden", "");
-				button.closest("div[style*='text-align:center']")?.setAttribute("data-home-track-hidden", "");
-			});
-
-			homeTrack.querySelectorAll(".crucial_entry").forEach((entry) => {
-				entry.style.background = "transparent";
-				entry.style.padding = "0";
-				entry.style.borderRadius = "0";
-			});
-
-			homeTrack.querySelectorAll(".crucial_container").forEach((container) => {
-				container.style.background = "transparent";
-				container.style.padding = "0";
-				container.style.margin = "0";
-				container.style.maxWidth = "none";
-			});
+		if (!homeState.initialized) {
+			homeState.initialized = true;
+			document.addEventListener("astro:before-swap", () => homeState.cleanup());
+			document.addEventListener("astro:page-load", initHomePage);
+			window.addEventListener("pagehide", () => homeState.cleanup());
 		}
 
-		normalizeHomeTrack();
-
-		if (homeTrack) {
-			const trackObserver = new MutationObserver(() => normalizeHomeTrack());
-			trackObserver.observe(homeTrack, { childList: true, subtree: true });
-		}
-
-		const timer = window.setTimeout(() => {
-			prefetch("/status");
-			prefetch("/gallery");
-			prefetch("/now");
-			prefetch("/media");
-		}, 2000);
-
-		window.addEventListener(
-			"pagehide",
-			() => {
-				window.clearTimeout(timer);
-			},
-			{ once: true },
-		);
+		initHomePage();
 
 	</script>
 </Base>
