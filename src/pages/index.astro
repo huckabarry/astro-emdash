@@ -348,9 +348,13 @@ function getVideoLabel(post: StatusFeedItem) {
 		</section>
 	</div>
 
-	<script>
-		// @ts-nocheck
-		import { prefetch } from "astro:prefetch";
+	<script is:inline data-astro-rerun>
+		function warmRoute(href) {
+			fetch(href, {
+				credentials: "omit",
+				headers: { "X-Afterword-Prefetch": "home" },
+			}).catch(() => {});
+		}
 		const homeState = window.__afterwordHome ??= {
 			initialized: false,
 			currentPage: 0,
@@ -452,10 +456,10 @@ function getVideoLabel(post: StatusFeedItem) {
 			}
 
 			const timer = window.setTimeout(() => {
-				prefetch("/status");
-				prefetch("/gallery");
-				prefetch("/now");
-				prefetch("/media");
+				warmRoute("/status");
+				warmRoute("/gallery");
+				warmRoute("/now");
+				warmRoute("/media");
 			}, 2000);
 
 			cleanupFns.push(() => window.clearTimeout(timer));
