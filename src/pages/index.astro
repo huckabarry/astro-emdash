@@ -353,6 +353,7 @@ function getVideoLabel(post: StatusFeedItem) {
 		import { prefetch } from "astro:prefetch";
 		const homeState = window.__afterwordHome ??= {
 			initialized: false,
+			currentPage: 0,
 			cleanup() {},
 		};
 
@@ -361,13 +362,10 @@ function getVideoLabel(post: StatusFeedItem) {
 
 			const cleanupFns = [];
 			const carouselRoot = document.querySelector("[data-carousel-root]");
-			const carouselPrev = document.querySelector("[data-carousel-prev]");
-			const carouselNext = document.querySelector("[data-carousel-next]");
 			const carouselViewport = carouselRoot?.querySelector("[data-carousel-viewport]");
 			const carouselItems = carouselRoot ? Array.from(carouselRoot.querySelectorAll("[data-carousel-item]")) : [];
 			const carouselStep = Number(carouselRoot?.getAttribute("data-carousel-step") || 1);
 			const homeTrack = document.querySelector(".home-track");
-			let currentPage = 0;
 
 			function syncCarouselHeight() {
 				if (!carouselViewport || !carouselItems.length) return;
@@ -379,8 +377,8 @@ function getVideoLabel(post: StatusFeedItem) {
 			function renderCarousel(page) {
 				if (!carouselItems.length) return;
 				const pageCount = Math.max(1, Math.ceil(carouselItems.length / Math.max(carouselStep, 1)));
-				currentPage = ((page % pageCount) + pageCount) % pageCount;
-				const start = currentPage * carouselStep;
+				homeState.currentPage = ((page % pageCount) + pageCount) % pageCount;
+				const start = homeState.currentPage * carouselStep;
 				const end = start + carouselStep;
 
 				carouselItems.forEach((item, index) => {
@@ -412,18 +410,29 @@ function getVideoLabel(post: StatusFeedItem) {
 			}
 
 			if (carouselRoot && carouselItems.length) {
-				const onPrev = () => renderCarousel(currentPage - 1);
-				const onNext = () => renderCarousel(currentPage + 1);
 				const onResize = () => syncCarouselHeight();
+				const onClick = (event) => {
+					const target = event.target;
+					if (!(target instanceof Element)) return;
 
-				renderCarousel(0);
-				carouselPrev?.addEventListener("click", onPrev);
-				carouselNext?.addEventListener("click", onNext);
+					if (target.closest("[data-carousel-prev]")) {
+						event.preventDefault();
+						renderCarousel(homeState.currentPage - 1);
+						return;
+					}
+
+					if (target.closest("[data-carousel-next]")) {
+						event.preventDefault();
+						renderCarousel(homeState.currentPage + 1);
+					}
+				};
+
+				renderCarousel(homeState.currentPage);
+				document.addEventListener("click", onClick);
 				window.addEventListener("resize", onResize, { passive: true });
 
 				cleanupFns.push(() => {
-					carouselPrev?.removeEventListener("click", onPrev);
-					carouselNext?.removeEventListener("click", onNext);
+					document.removeEventListener("click", onClick);
 					window.removeEventListener("resize", onResize);
 				});
 
