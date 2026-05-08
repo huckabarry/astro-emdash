@@ -2,37 +2,20 @@
 import { getEmDashCollection } from "emdash";
 import Base from "../layouts/Base.astro";
 import { getImageAlt, getImageUrl, getPortableTextImages } from "../lib/afterword";
-import { PUBLIC_ARCHIVE_CACHE_CONTROL } from "../lib/emdash-content";
+import { PUBLIC_ARCHIVE_CACHE_CONTROL, hasAnyPostTag, getPostStringField } from "../lib/emdash-content";
 
 Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
 
-const GALLERY_POST_QUERY_LIMIT = 80;
+const GALLERY_POST_QUERY_LIMIT = 200;
 const GALLERY_INITIAL_PHOTO_LIMIT = 120;
 
-const [galleryResult, photographyResult, fieldNotesResult] = await Promise.all([
-	getEmDashCollection("posts", {
-		status: "published",
-		where: { tag: "gallery" },
-		orderBy: { published_at: "desc" },
-		limit: GALLERY_POST_QUERY_LIMIT,
-	}),
-	getEmDashCollection("posts", {
-		status: "published",
-		where: { tag: "photography" },
-		orderBy: { published_at: "desc" },
-		limit: GALLERY_POST_QUERY_LIMIT,
-	}),
-	getEmDashCollection("posts", {
-		status: "published",
-		where: { tag: "field-notes" },
-		orderBy: { published_at: "desc" },
-		limit: GALLERY_POST_QUERY_LIMIT,
-	}),
-]);
+const galleryResult = await getEmDashCollection("posts", {
+	status: "published",
+	orderBy: { published_at: "desc" },
+	limit: GALLERY_POST_QUERY_LIMIT,
+});
 
 Astro.cache.set(galleryResult.cacheHint);
-Astro.cache.set(photographyResult.cacheHint);
-Astro.cache.set(fieldNotesResult.cacheHint);
 
 type GalleryPost = {
 	id: string;
@@ -159,10 +142,10 @@ function buildPhoto(post: GalleryPost, image: unknown, imageIndex = 0): GalleryP
 
 const posts = Array.from(
 	new Map(
-		[...galleryResult.entries, ...photographyResult.entries, ...fieldNotesResult.entries].map((post) => [
-			post.id,
-			post,
-		]),
+		galleryResult.entries
+			.filter((post) => hasAnyPostTag(post, ["gallery", "photography", "field-notes"]))
+			.filter((post) => getPostStringField(post, "source_type") !== "earlier-web")
+			.map((post) => [post.id, post]),
 	).values(),
 ).sort((left, right) => {
 	const leftDate = left.data.publishedAt ? new Date(left.data.publishedAt).getTime() : 0;

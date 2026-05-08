@@ -5,46 +5,30 @@ import { formatDisplayDate, getImageUrl } from "../lib/afterword";
 import {
 	dedupeEntriesById,
 	getPostStringField,
+	hasAnyPostTag,
 	sortEntriesByPublishedAtDesc,
 } from "../lib/emdash-content";
 
 Astro.response.headers.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
 
-const [nowResult, galleryResults, fallbackResult] = await Promise.all([
-	getEmDashCollection("posts", {
-		status: "published",
-		where: { tag: "now" },
-		orderBy: { published_at: "desc" },
-		limit: 12,
-	}),
-	Promise.all(
-		["gallery", "photography"].map((tag) =>
-			getEmDashCollection("posts", {
-				status: "published",
-				where: { tag },
-				orderBy: { published_at: "desc" },
-				limit: 2,
-			}),
-		),
-	),
-	getEmDashCollection("posts", {
-		status: "published",
-		orderBy: { published_at: "desc" },
-		limit: 24,
-	}),
-]);
+const postsResult = await getEmDashCollection("posts", {
+	status: "published",
+	orderBy: { published_at: "desc" },
+	limit: 120,
+});
 
-Astro.cache.set(nowResult.cacheHint);
-galleryResults.forEach((result) => Astro.cache.set(result.cacheHint));
-Astro.cache.set(fallbackResult.cacheHint);
+Astro.cache.set(postsResult.cacheHint);
 
-const fallbackPosts = fallbackResult.entries.filter(
+const fallbackPosts = postsResult.entries.filter(
 	(post) => getPostStringField(post, "source_type") !== "earlier-web",
 );
-const visiblePosts = (nowResult.entries.length ? nowResult.entries : fallbackPosts).slice(0, 12);
+const nowPosts = fallbackPosts.filter((post) => hasAnyPostTag(post, ["now"]));
+const visiblePosts = (nowPosts.length ? nowPosts : fallbackPosts).slice(0, 12);
 const latestPhoto =
 	sortEntriesByPublishedAtDesc(
-		dedupeEntriesById(galleryResults.flatMap((result) => result.entries)),
+		dedupeEntriesById(
+			fallbackPosts.filter((post) => hasAnyPostTag(post, ["gallery", "photography"])),
+		),
 	)[0] ?? null;
 const latestPhotoImage = latestPhoto ? getImageUrl(latestPhoto.data.featured_image, Astro.url.origin) : null;
 const latestPhotoAlt = latestPhoto?.data.title ?? "Latest photo";

@@ -2,18 +2,22 @@
 import { getEmDashCollection } from "emdash";
 import Base from "../layouts/Base.astro";
 import { getImageUrl, formatDisplayDate } from "../lib/afterword";
-import { PUBLIC_ARCHIVE_CACHE_CONTROL } from "../lib/emdash-content";
+import { PUBLIC_ARCHIVE_CACHE_CONTROL, hasAnyPostTag, getPostStringField } from "../lib/emdash-content";
 
 Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
 
-const { entries: posts, cacheHint } = await getEmDashCollection("posts", {
+const { entries, cacheHint } = await getEmDashCollection("posts", {
 	status: "published",
-	where: { tag: "field-notes" },
 	orderBy: { published_at: "desc" },
-	limit: 24,
+	limit: 120,
 });
 
 Astro.cache.set(cacheHint);
+
+const posts = entries
+	.filter((post) => hasAnyPostTag(post, ["field-notes"]))
+	.filter((post) => getPostStringField(post, "source_type") !== "earlier-web")
+	.slice(0, 24);
 ---
 
 <Base title="Field Notes" description="Personal, place-based writing and quieter observations.">

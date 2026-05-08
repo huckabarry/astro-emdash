@@ -7,26 +7,24 @@ import {
 	PLANNING_TAG_SLUGS,
 	dedupeEntriesById,
 	getPostStringField,
+	hasAnyPostTag,
 	sortEntriesByPublishedAtDesc,
 } from "../lib/emdash-content";
 
 Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
 
-const planningResults = await Promise.all(
-	PLANNING_TAG_SLUGS.map((tag) =>
-		getEmDashCollection("posts", {
-			status: "published",
-			where: { tag },
-			orderBy: { published_at: "desc" },
-			limit: 20,
-		}),
-	),
-);
+const planningResult = await getEmDashCollection("posts", {
+	status: "published",
+	orderBy: { published_at: "desc" },
+	limit: 200,
+});
 
-planningResults.forEach((result) => Astro.cache.set(result.cacheHint));
+Astro.cache.set(planningResult.cacheHint);
 
 const planningPosts = sortEntriesByPublishedAtDesc(
-	dedupeEntriesById(planningResults.flatMap((result) => result.entries)),
+	dedupeEntriesById(
+		planningResult.entries.filter((post) => hasAnyPostTag(post, PLANNING_TAG_SLUGS)),
+	),
 ).filter(
 	(post) => getPostStringField(post, "source_type") !== "earlier-web",
 );

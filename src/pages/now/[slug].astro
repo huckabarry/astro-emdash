@@ -3,7 +3,7 @@ import { getEmDashCollection, getEmDashEntry, getEntryTerms, getSeoMeta } from "
 import { PortableText, Image } from "emdash/ui";
 import Base from "../../layouts/Base.astro";
 import { getImageUrl } from "../../lib/afterword";
-import { PUBLIC_ARCHIVE_CACHE_CONTROL } from "../../lib/emdash-content";
+import { PUBLIC_ARCHIVE_CACHE_CONTROL, hasAnyPostTag } from "../../lib/emdash-content";
 
 const slug = Astro.params.slug || "";
 
@@ -24,11 +24,12 @@ if (!isPreview) {
 Astro.cache.set(cacheHint);
 
 const tags = await getEntryTerms("posts", post.data.id as string, "tag");
-const { entries: nowPosts } = await getEmDashCollection("posts", {
+const { entries } = await getEmDashCollection("posts", {
 	status: "published",
-	where: { tag: "now" },
 	orderBy: { published_at: "desc" },
+	limit: 120,
 });
+const nowPosts = entries.filter((entry) => hasAnyPostTag(entry, ["now"]));
 
 const currentIndex = nowPosts.findIndex((entry) => entry.id === post.id);
 const previousPost = currentIndex >= 0 ? nowPosts[currentIndex + 1] ?? null : null;

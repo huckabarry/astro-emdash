@@ -8,6 +8,7 @@ import { getStatusFeedPage, type StatusFeedItem } from "../lib/status-feed";
 import {
 	PUBLIC_ARCHIVE_CACHE_CONTROL,
 	getPostStringField,
+	hasAnyPostTag,
 } from "../lib/emdash-content";
 
 Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
@@ -16,18 +17,18 @@ const [statusPage, fieldNotesResult, homeIntroSection] = await Promise.all([
 	getStatusFeedPage({ limit: 5, includeReplies: false }),
 	getEmDashCollection("posts", {
 		status: "published",
-		where: { tag: "field-notes" },
 		orderBy: { published_at: "desc" },
-		limit: 6,
+		limit: 80,
 	}),
 	getSection("home-intro"),
 ]);
 
 Astro.cache.set(fieldNotesResult.cacheHint);
 
-const fieldNotesPosts = fieldNotesResult.entries.filter(
-	(post) => getPostStringField(post, "source_type") !== "earlier-web",
-);
+const fieldNotesPosts = fieldNotesResult.entries
+	.filter((post) => hasAnyPostTag(post, ["field-notes"]))
+	.filter((post) => getPostStringField(post, "source_type") !== "earlier-web")
+	.slice(0, 6);
 const homeBelowStatusWidgetArea = await getWidgetArea("home-below-status");
 
 function formatStatusDate(value: Date) {

@@ -18,13 +18,15 @@ if (!tag) {
 
 const { entries, cacheHint } = await getEmDashCollection("posts", {
 	status: "published",
-	where: { tag: tag.slug },
 	orderBy: { published_at: "desc" },
+	limit: 200,
 });
 
 Astro.cache.set(cacheHint);
 
-const uniqueTagSlugs = [...new Set(entries.flatMap((post) => getPostTagSlugs(post)))];
+const filteredEntries = entries.filter((post) => getPostTagSlugs(post).includes(tag.slug));
+
+const uniqueTagSlugs = [...new Set(filteredEntries.flatMap((post) => getPostTagSlugs(post)))];
 const tagEntries = await Promise.all(
 	uniqueTagSlugs.map(async (tagSlug) => [tagSlug, await getTerm("tag", tagSlug)] as const),
 );
@@ -34,7 +36,7 @@ const tagMap = new Map(
 		{ slug: tagSlug, label: entry?.label || fallbackTagLabel(tagSlug) },
 	]),
 );
-const posts = entries.map((post) => ({
+const posts = filteredEntries.map((post) => ({
 	post,
 	tags: getPostTagSlugs(post).map(
 		(tagSlug) => tagMap.get(tagSlug) ?? { slug: tagSlug, label: fallbackTagLabel(tagSlug) },
