@@ -5,7 +5,7 @@ import { formatDisplayDate, getImageUrl } from "../lib/afterword";
 import {
 	dedupeEntriesById,
 	getPostStringField,
-	hasAnyPostTag,
+	getResolvedPostTagSlugMap,
 	sortEntriesByPublishedAtDesc,
 } from "../lib/emdash-content";
 
@@ -22,12 +22,16 @@ Astro.cache.set(postsResult.cacheHint);
 const fallbackPosts = postsResult.entries.filter(
 	(post) => getPostStringField(post, "source_type") !== "earlier-web",
 );
-const nowPosts = fallbackPosts.filter((post) => hasAnyPostTag(post, ["now"]));
+const nowTagSlugMap = await getResolvedPostTagSlugMap(fallbackPosts);
+const nowPosts = fallbackPosts.filter((post) => (nowTagSlugMap.get(post.id) || []).includes("now"));
 const visiblePosts = (nowPosts.length ? nowPosts : fallbackPosts).slice(0, 12);
 const latestPhoto =
 	sortEntriesByPublishedAtDesc(
 		dedupeEntriesById(
-			fallbackPosts.filter((post) => hasAnyPostTag(post, ["gallery", "photography"])),
+			fallbackPosts.filter((post) => {
+				const slugs = nowTagSlugMap.get(post.id) || [];
+				return slugs.includes("gallery") || slugs.includes("photography");
+			}),
 		),
 	)[0] ?? null;
 const latestPhotoImage = latestPhoto ? getImageUrl(latestPhoto.data.featured_image, Astro.url.origin) : null;

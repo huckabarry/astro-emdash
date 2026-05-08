@@ -4,7 +4,7 @@ import Base from "../../layouts/Base.astro";
 import {
 	PUBLIC_ARCHIVE_CACHE_CONTROL,
 	fallbackTagLabel,
-	getPostTagSlugs,
+	getResolvedPostTagSlugMap,
 } from "../../lib/emdash-content";
 
 Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
@@ -24,9 +24,10 @@ const { entries, cacheHint } = await getEmDashCollection("posts", {
 
 Astro.cache.set(cacheHint);
 
-const filteredEntries = entries.filter((post) => getPostTagSlugs(post).includes(tag.slug));
+const tagSlugMap = await getResolvedPostTagSlugMap(entries);
+const filteredEntries = entries.filter((post) => (tagSlugMap.get(post.id) || []).includes(tag.slug));
 
-const uniqueTagSlugs = [...new Set(filteredEntries.flatMap((post) => getPostTagSlugs(post)))];
+const uniqueTagSlugs = [...new Set(filteredEntries.flatMap((post) => tagSlugMap.get(post.id) || []))];
 const tagEntries = await Promise.all(
 	uniqueTagSlugs.map(async (tagSlug) => [tagSlug, await getTerm("tag", tagSlug)] as const),
 );
@@ -38,7 +39,7 @@ const tagMap = new Map(
 );
 const posts = filteredEntries.map((post) => ({
 	post,
-	tags: getPostTagSlugs(post).map(
+	tags: (tagSlugMap.get(post.id) || []).map(
 		(tagSlug) => tagMap.get(tagSlug) ?? { slug: tagSlug, label: fallbackTagLabel(tagSlug) },
 	),
 }));

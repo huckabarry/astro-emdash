@@ -7,7 +7,7 @@ import {
 	PLANNING_TAG_SLUGS,
 	dedupeEntriesById,
 	getPostStringField,
-	hasAnyPostTag,
+	getResolvedPostTagSlugMap,
 	sortEntriesByPublishedAtDesc,
 } from "../lib/emdash-content";
 
@@ -20,10 +20,14 @@ const planningResult = await getEmDashCollection("posts", {
 });
 
 Astro.cache.set(planningResult.cacheHint);
+const planningTagSlugMap = await getResolvedPostTagSlugMap(planningResult.entries);
 
 const planningPosts = sortEntriesByPublishedAtDesc(
 	dedupeEntriesById(
-		planningResult.entries.filter((post) => hasAnyPostTag(post, PLANNING_TAG_SLUGS)),
+		planningResult.entries.filter((post) => {
+			const slugs = planningTagSlugMap.get(post.id) || [];
+			return PLANNING_TAG_SLUGS.some((slug) => slugs.includes(slug));
+		}),
 	),
 ).filter(
 	(post) => getPostStringField(post, "source_type") !== "earlier-web",

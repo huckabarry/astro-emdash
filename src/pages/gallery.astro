@@ -2,7 +2,11 @@
 import { getEmDashCollection } from "emdash";
 import Base from "../layouts/Base.astro";
 import { getImageAlt, getImageUrl, getPortableTextImages } from "../lib/afterword";
-import { PUBLIC_ARCHIVE_CACHE_CONTROL, hasAnyPostTag, getPostStringField } from "../lib/emdash-content";
+import {
+	PUBLIC_ARCHIVE_CACHE_CONTROL,
+	getPostStringField,
+	getResolvedPostTagSlugMap,
+} from "../lib/emdash-content";
 
 Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
 
@@ -16,6 +20,7 @@ const galleryResult = await getEmDashCollection("posts", {
 });
 
 Astro.cache.set(galleryResult.cacheHint);
+const galleryTagSlugMap = await getResolvedPostTagSlugMap(galleryResult.entries);
 
 type GalleryPost = {
 	id: string;
@@ -143,7 +148,10 @@ function buildPhoto(post: GalleryPost, image: unknown, imageIndex = 0): GalleryP
 const posts = Array.from(
 	new Map(
 		galleryResult.entries
-			.filter((post) => hasAnyPostTag(post, ["gallery", "photography", "field-notes"]))
+			.filter((post) => {
+				const slugs = galleryTagSlugMap.get(post.id) || [];
+				return slugs.includes("gallery") || slugs.includes("photography") || slugs.includes("field-notes");
+			})
 			.filter((post) => getPostStringField(post, "source_type") !== "earlier-web")
 			.map((post) => [post.id, post]),
 	).values(),

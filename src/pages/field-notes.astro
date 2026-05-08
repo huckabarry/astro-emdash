@@ -2,7 +2,11 @@
 import { getEmDashCollection } from "emdash";
 import Base from "../layouts/Base.astro";
 import { getImageUrl, formatDisplayDate } from "../lib/afterword";
-import { PUBLIC_ARCHIVE_CACHE_CONTROL, hasAnyPostTag, getPostStringField } from "../lib/emdash-content";
+import {
+	PUBLIC_ARCHIVE_CACHE_CONTROL,
+	getPostStringField,
+	getResolvedPostTagSlugMap,
+} from "../lib/emdash-content";
 
 Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
 
@@ -14,8 +18,9 @@ const { entries, cacheHint } = await getEmDashCollection("posts", {
 
 Astro.cache.set(cacheHint);
 
+const tagSlugMap = await getResolvedPostTagSlugMap(entries);
 const posts = entries
-	.filter((post) => hasAnyPostTag(post, ["field-notes"]))
+	.filter((post) => (tagSlugMap.get(post.id) || []).includes("field-notes"))
 	.filter((post) => getPostStringField(post, "source_type") !== "earlier-web")
 	.slice(0, 24);
 ---
