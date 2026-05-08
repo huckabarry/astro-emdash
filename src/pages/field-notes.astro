@@ -6,6 +6,7 @@ import {
 	PUBLIC_ARCHIVE_CACHE_CONTROL,
 	getPostStringField,
 	getResolvedPostTagSlugMap,
+	PLANNING_TAG_SLUGS,
 } from "../lib/emdash-content";
 
 Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
@@ -20,8 +21,11 @@ Astro.cache.set(cacheHint);
 
 const tagSlugMap = await getResolvedPostTagSlugMap(entries);
 const posts = entries
-	.filter((post) => (tagSlugMap.get(post.id) || []).includes("field-notes"))
 	.filter((post) => getPostStringField(post, "source_type") !== "earlier-web")
+	.filter((post) => {
+		const slugs = tagSlugMap.get(post.id) || [];
+		return !slugs.includes("now") && !PLANNING_TAG_SLUGS.some((slug) => slugs.includes(slug));
+	})
 	.slice(0, 24);
 ---
 
