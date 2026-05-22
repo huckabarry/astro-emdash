@@ -334,6 +334,21 @@ function summarizeCheckin(item: CheckinItem, maxLength = 220) {
 											<p class="mixed-feed__subtle">Latest update: {entry.media.activityLabel}</p>
 										) : null}
 										{entry.media.summary ? <p class="mixed-feed__summary">{entry.media.summary}</p> : null}
+										{entry.media.links.length ? (
+											<div class="mixed-feed__actions">
+												<a class="tag-pill mixed-feed__action" href={entry.media.href}>Open entry</a>
+												{entry.media.links.map((link) => (
+													<a
+														class="tag-pill mixed-feed__action"
+														href={link.url}
+														target={link.external ? "_blank" : undefined}
+														rel={link.external ? "noreferrer" : undefined}
+													>
+														{link.label}
+													</a>
+												))}
+											</div>
+										) : null}
 										{entry.media.embedUrl ? (
 											<div class="media-entry__embed">
 												<iframe
@@ -353,21 +368,6 @@ function summarizeCheckin(item: CheckinItem, maxLength = 220) {
 										{entry.media.tags.length ? (
 											<div class="mixed-feed__tags">
 												{entry.media.tags.map((tag) => <span class="tag-pill">{tag}</span>)}
-											</div>
-										) : null}
-										{entry.media.links.length ? (
-											<div class="mixed-feed__actions">
-												<a class="tag-pill mixed-feed__action" href={entry.media.href}>Open entry</a>
-												{entry.media.links.map((link) => (
-													<a
-														class="tag-pill mixed-feed__action"
-														href={link.url}
-														target={link.external ? "_blank" : undefined}
-														rel={link.external ? "noreferrer" : undefined}
-													>
-														{link.label}
-													</a>
-												))}
 											</div>
 										) : null}
 									</div>
@@ -515,6 +515,8 @@ function summarizeCheckin(item: CheckinItem, maxLength = 220) {
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		margin-top: 0.8rem;
+		position: relative;
+		z-index: 2;
 	}
 
 	.mixed-feed__audio {
@@ -529,6 +531,8 @@ function summarizeCheckin(item: CheckinItem, maxLength = 220) {
 	.media-entry__embed {
 		margin-top: 0.9rem;
 		max-width: 26rem;
+		position: relative;
+		z-index: 1;
 	}
 
 	.media-entry__embed-frame {
