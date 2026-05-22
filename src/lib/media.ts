@@ -120,6 +120,7 @@ export type MediaTimelineItem = {
 	tags: string[];
 	artist?: string;
 	audioUrl?: string | null;
+	embedUrl?: string | null;
 	credit?: string;
 	links: MediaTimelineLink[];
 	mediaType?: string;
@@ -262,6 +263,27 @@ function buildMediaTimelinePageCacheKey({
 	});
 }
 
+function toAppleMusicEmbedUrl(value: string | null | undefined) {
+	const normalized = normalizeString(value);
+	if (!normalized) return null;
+
+	try {
+		const url = new URL(normalized);
+		if (url.hostname !== "music.apple.com") {
+			return null;
+		}
+
+		url.hostname = "embed.music.apple.com";
+		if (!url.searchParams.has("app")) {
+			url.searchParams.set("app", "music");
+		}
+
+		return url.toString();
+	} catch {
+		return null;
+	}
+}
+
 function toTrackTimelineItem(track: TrackEntry): MediaTimelineItem {
 	return {
 		id: `track-${track.slug}`,
@@ -277,6 +299,7 @@ function toTrackTimelineItem(track: TrackEntry): MediaTimelineItem {
 		tags: [],
 		artist: track.artist,
 		audioUrl: track.previewUrl || null,
+		embedUrl: toAppleMusicEmbedUrl(track.appleMusicUrl || track.playlistUrl || null),
 		links: (track.listenLinks || []).slice(0, 3).map((link) => ({
 			label: link.label,
 			url: link.url,
