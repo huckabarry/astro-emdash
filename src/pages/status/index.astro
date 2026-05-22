@@ -544,6 +544,24 @@ function summarizeCheckin(item: CheckinItem, maxLength = 220) {
 		background: #111;
 	}
 
+	.mixed-feed__item--media .media-entry {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.95rem;
+	}
+
+	.mixed-feed__item--media .media-entry__cover {
+		display: block;
+		width: min(16rem, 100%);
+	}
+
+	.mixed-feed__item--media .media-entry__body {
+		min-width: 0;
+	}
+
+	.mixed-feed__item--media .media-entry__credit {
+		margin-bottom: 0.65rem;
+	}
+
 	.mixed-checkin {
 		display: grid;
 		grid-template-columns: minmax(10rem, 11rem) minmax(0, 1fr);
