@@ -375,6 +375,8 @@ function getVideoLabel(post: StatusFeedItem) {
 			const carouselViewport = carouselRoot?.querySelector("[data-carousel-viewport]");
 			const carouselItems = carouselRoot ? Array.from(carouselRoot.querySelectorAll("[data-carousel-item]")) : [];
 			const carouselStep = Number(carouselRoot?.getAttribute("data-carousel-step") || 1);
+			const prevButton = document.querySelector("[data-carousel-prev]");
+			const nextButton = document.querySelector("[data-carousel-next]");
 			const homeTrack = document.querySelector(".home-track");
 
 			function syncCarouselHeight() {
@@ -421,29 +423,24 @@ function getVideoLabel(post: StatusFeedItem) {
 
 			if (carouselRoot && carouselItems.length) {
 				const onResize = () => syncCarouselHeight();
-				const onClick = (event) => {
-					const target = event.target;
-					if (!(target instanceof Element)) return;
-
-					if (target.closest("[data-carousel-prev]")) {
-						event.preventDefault();
-						renderCarousel(homeState.currentPage - 1);
-						return;
-					}
-
-					if (target.closest("[data-carousel-next]")) {
-						event.preventDefault();
-						renderCarousel(homeState.currentPage + 1);
-					}
+				const showPrevious = (event) => {
+					event.preventDefault();
+					renderCarousel(homeState.currentPage - 1);
+				};
+				const showNext = (event) => {
+					event.preventDefault();
+					renderCarousel(homeState.currentPage + 1);
 				};
 
 				renderCarousel(homeState.currentPage);
-				document.addEventListener("click", onClick);
 				window.addEventListener("resize", onResize, { passive: true });
+				prevButton?.addEventListener("click", showPrevious);
+				nextButton?.addEventListener("click", showNext);
 
 				cleanupFns.push(() => {
-					document.removeEventListener("click", onClick);
 					window.removeEventListener("resize", onResize);
+					prevButton?.removeEventListener("click", showPrevious);
+					nextButton?.removeEventListener("click", showNext);
 				});
 
 				carouselRoot.querySelectorAll("img").forEach((image) => {

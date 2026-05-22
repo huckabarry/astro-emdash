@@ -668,6 +668,8 @@ h1.section-title {
 	color: var(--muted);
 	font: inherit;
 	cursor: pointer;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
 }
 
 .home-updates__button:hover {
