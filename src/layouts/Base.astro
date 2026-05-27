@@ -70,6 +70,7 @@ const footerNavLinks = [
 	{ href: "/about", labelKey: "about" },
 	{ href: "/colophon", labelKey: "colophon" },
 	{ href: "/subscribe", labelKey: "subscribe" },
+	{ href: "/check-ins/atlas", labelKey: "atlas" },
 ];
 const footerWidgetArea = await getWidgetArea("footer");
 const hasSidebar = typeof sidebar === "boolean" ? sidebar : Astro.slots.has("sidebar");
@@ -111,6 +112,11 @@ function normalizeMenuHref(url: string) {
 	return locale ? `/it${canonical}` : canonical;
 }
 
+function footerLabel(labelKey: string) {
+	if (labelKey === "atlas") return "Atlas";
+	return navLabel(labelKey, currentLocale);
+}
+
 function portableTextPlainText(value: unknown) {
 	// EmDash sections are stored as PortableText-ish blocks. We only need a short
 	// inline subtitle; grab text nodes from the first block.
@@ -146,7 +152,7 @@ const primaryNavLinks: NavLink[] = primaryMenu?.items?.length
 	  }));
 const localizedFooterNavLinks = footerNavLinks.map((item) => ({
 	href: localizePath(item.href, currentLocale),
-	label: navLabel(item.labelKey, currentLocale),
+	label: footerLabel(item.labelKey),
 }));
 const languageLinks = [
 	{

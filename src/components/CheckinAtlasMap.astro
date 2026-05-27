@@ -1,0 +1,118 @@
+---
+import "leaflet/dist/leaflet.css";
+
+type AtlasPoint = {
+	name: string;
+	place: string;
+	visitedAtLabel: string;
+	latitude: number | null;
+	longitude: number | null;
+	href: string;
+};
+
+interface Props {
+	items: AtlasPoint[];
+}
+
+const { items } = Astro.props;
+const serializedItems = JSON.stringify(items);
+---
+
+<div
+	class="checkin-map__frame checkin-map__frame--leaflet"
+	data-checkin-atlas-map
+	data-items={serializedItems}
+	aria-label="Map showing recent check-ins"
+></div>
+
+<script>
+	type AtlasPoint = {
+		name?: string;
+		place?: string;
+		visitedAtLabel?: string;
+		latitude?: number | null;
+		longitude?: number | null;
+		href?: string;
+	};
+
+	async function bootCheckinAtlasMap(element: HTMLElement | Element) {
+		if (!(element instanceof HTMLElement) || element.dataset.mapReady === "true") {
+			return;
+		}
+
+		let items: AtlasPoint[] = [];
+		try {
+			items = JSON.parse(element.dataset.items || "[]");
+		} catch {
+			items = [];
+		}
+
+		if (!Array.isArray(items) || !items.length) {
+			return;
+		}
+
+		const { default: leaflet } = await import("leaflet");
+		const map = leaflet.map(element, {
+			scrollWheelZoom: false,
+			attributionControl: true,
+		});
+
+		leaflet
+			.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+				attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+				maxZoom: 19,
+			})
+			.addTo(map);
+
+		const bounds: Array<[number, number]> = [];
+
+		for (const item of items) {
+			const latitude = Number(item.latitude);
+			const longitude = Number(item.longitude);
+			if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
+
+			bounds.push([latitude, longitude]);
+
+			const marker = leaflet.marker([latitude, longitude], {
+				icon: leaflet.divIcon({
+					className: "afterword-map-pin-wrapper",
+					html: '<span class="afterword-map-pin"></span>',
+					iconSize: [24, 24],
+					iconAnchor: [12, 24],
+					popupAnchor: [0, -20],
+				}),
+			});
+
+			const place = item.place ? `<div class="atlas-popup__place">${item.place}</div>` : "";
+			const href = item.href || "#";
+			const name = item.name || "Check-in";
+			const dateLabel = item.visitedAtLabel || "";
+			marker.bindPopup(
+				`<div class="atlas-popup"><a href="${href}"><strong>${name}</strong></a>${place}<div class="atlas-popup__date">${dateLabel}</div></div>`,
+			);
+			marker.addTo(map);
+		}
+
+		if (bounds.length === 1) {
+			map.setView(bounds[0], 13);
+		} else if (bounds.length > 1) {
+			map.fitBounds(bounds, { padding: [28, 28], maxZoom: 13 });
+		}
+
+		const refreshSize = () => requestAnimationFrame(() => map.invalidateSize(false));
+		refreshSize();
+		window.setTimeout(refreshSize, 120);
+		window.setTimeout(refreshSize, 320);
+
+		if (typeof ResizeObserver !== "undefined") {
+			const observer = new ResizeObserver(() => refreshSize());
+			observer.observe(element);
+		}
+
+		element.dataset.mapReady = "true";
+	}
+
+	document.querySelectorAll("[data-checkin-atlas-map]").forEach((element) => {
+		void bootCheckinAtlasMap(element);
+	});
+</script>

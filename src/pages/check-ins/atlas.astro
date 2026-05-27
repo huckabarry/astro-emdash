@@ -1,7 +1,6 @@
 ---
-import "leaflet/dist/leaflet.css";
-
 import { env } from "cloudflare:workers";
+import CheckinAtlasMap from "../../components/CheckinAtlasMap.astro";
 import Base from "../../layouts/Base.astro";
 import { getCheckins } from "../../lib/checkins";
 
@@ -36,122 +35,23 @@ const mappedCheckins = checkins
 	<section class="page-head">
 		<h1 class="section-title">Check-in Atlas</h1>
 		<p class="page-head__lede">
-			A quick look at what the last fifty mapped check-ins feel like as one surface instead of a list.
+			The latest fifty check-ins on one map.
 		</p>
 	</section>
 
 	<section class="atlas">
-		<div
-			class="atlas__map checkin-map__frame checkin-map__frame--leaflet"
-			data-checkin-atlas
-			aria-label="Map showing the latest fifty check-ins"
-		></div>
+		<div class="atlas__map">
+			<CheckinAtlasMap items={mappedCheckins} />
+		</div>
 
 		<div class="atlas__summary">
 			<p class="atlas__count">{mappedCheckins.length} recent check-ins with coordinates</p>
 			<p class="atlas__note">
-				This page is intentionally unlinked for now. It is just a visual test bed.
+				This page is intentionally unlinked for now. Open a marker to jump into a specific check-in.
 			</p>
 		</div>
-
-		<ol class="atlas__list" aria-label="Latest mapped check-ins">
-			{mappedCheckins.map((item) => (
-				<li class="atlas__list-item">
-					<a class="atlas__list-link" href={item.href}>
-						<strong>{item.name}</strong>
-						{item.place ? <span>{item.place}</span> : null}
-						<time datetime={item.visitedAt}>{item.visitedAtLabel}</time>
-					</a>
-				</li>
-			))}
-		</ol>
 	</section>
 </Base>
-
-<script type="application/json" id="checkin-atlas-data" set:html={JSON.stringify(mappedCheckins)}></script>
-
-<script is:inline data-astro-rerun>
-	async function bootCheckinAtlas() {
-		const root = document.querySelector("[data-checkin-atlas]");
-		const payload = document.querySelector("#checkin-atlas-data");
-
-		if (!(root instanceof HTMLElement) || root.dataset.mapReady === "true" || !(payload instanceof HTMLScriptElement)) {
-			return;
-		}
-
-		let items = [];
-		try {
-			items = JSON.parse(payload.textContent || "[]");
-		} catch {
-			items = [];
-		}
-
-		if (!Array.isArray(items) || !items.length) {
-			return;
-		}
-
-		const { default: leaflet } = await import("leaflet");
-
-		const map = leaflet.map(root, {
-			scrollWheelZoom: false,
-			attributionControl: true,
-		});
-
-		leaflet
-			.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-				attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-				maxZoom: 19,
-			})
-			.addTo(map);
-
-		const bounds = [];
-
-		for (const item of items) {
-			const latitude = Number(item.latitude);
-			const longitude = Number(item.longitude);
-			if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
-
-			bounds.push([latitude, longitude]);
-
-			const marker = leaflet.marker([latitude, longitude], {
-				icon: leaflet.divIcon({
-					className: "afterword-map-pin-wrapper",
-					html: '<span class="afterword-map-pin"></span>',
-					iconSize: [24, 24],
-					iconAnchor: [12, 24],
-					popupAnchor: [0, -20],
-				}),
-			});
-
-			const place = item.place ? `<div class="atlas-popup__place">${item.place}</div>` : "";
-			marker.bindPopup(
-				`<div class="atlas-popup"><a href="${item.href}"><strong>${item.name}</strong></a>${place}<div class="atlas-popup__date">${item.visitedAtLabel}</div></div>`,
-			);
-			marker.addTo(map);
-		}
-
-		if (bounds.length === 1) {
-			map.setView(bounds[0], 13);
-		} else if (bounds.length > 1) {
-			map.fitBounds(bounds, { padding: [28, 28], maxZoom: 13 });
-		}
-
-		const refreshSize = () => requestAnimationFrame(() => map.invalidateSize(false));
-		refreshSize();
-		window.setTimeout(refreshSize, 120);
-		window.setTimeout(refreshSize, 320);
-
-		if (typeof ResizeObserver !== "undefined") {
-			const observer = new ResizeObserver(() => refreshSize());
-			observer.observe(root);
-		}
-
-		root.dataset.mapReady = "true";
-	}
-
-	document.addEventListener("astro:page-load", bootCheckinAtlas);
-	bootCheckinAtlas();
-</script>
 
 <style>
 	.page-head {
@@ -185,41 +85,6 @@ const mappedCheckins = checkins
 	.atlas__note {
 		margin: 0;
 		font-size: 0.92rem;
-	}
-
-	.atlas__list {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-		gap: 0.75rem;
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	.atlas__list-item {
-		min-width: 0;
-	}
-
-	.atlas__list-link {
-		display: grid;
-		gap: 0.18rem;
-		padding: 0.85rem 0.9rem;
-		border-radius: 0.5rem;
-		background: color-mix(in srgb, var(--surface) 26%, transparent);
-		text-decoration: none;
-	}
-
-	.atlas__list-link strong {
-		color: #fff;
-		font-size: 0.98rem;
-		line-height: 1.25;
-	}
-
-	.atlas__list-link span,
-	.atlas__list-link time {
-		color: var(--muted);
-		font-size: 0.86rem;
-		line-height: 1.4;
 	}
 
 	:global(.atlas-popup) {
