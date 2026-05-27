@@ -86,7 +86,7 @@ function summarizeCheckin(item: CheckinItem, maxLength = 220) {
 	{mixedFeed.length ? (
 		<section class="mixed-feed" aria-label="Combined live feed">
 			{mixedFeed.map((entry) => (
-				<article class="mixed-feed__entry">
+				<article class:list={["mixed-feed__entry", `mixed-feed__entry--${entry.kind}`]}>
 					<div class="mixed-feed__meta-column">
 						<time class="mixed-feed__date" datetime={entry.date.toISOString()}>
 							{formatDate(entry.date)}
@@ -413,6 +413,11 @@ function summarizeCheckin(item: CheckinItem, maxLength = 220) {
 
 	.mixed-feed__entry:first-child {
 		padding-top: 0;
+		border-top: 0;
+	}
+
+	.mixed-feed__entry--checkin,
+	.mixed-feed__entry--media {
 		border-top: 0;
 	}
 
