@@ -1,10 +1,10 @@
 import cloudflare from "@astrojs/cloudflare";
 import react from "@astrojs/react";
 import { d1, r2 } from "@emdash-cms/cloudflare";
-import { atprotoPlugin } from "@emdash-cms/plugin-atproto";
+import atprotoPlugin from "@emdash-cms/plugin-atproto";
 import { embedsPlugin } from "@emdash-cms/plugin-embeds";
 import { formsPlugin } from "@emdash-cms/plugin-forms";
-import { webhookNotifierPlugin } from "@emdash-cms/plugin-webhook-notifier";
+import webhookNotifierPlugin from "@emdash-cms/plugin-webhook-notifier";
 import { defineConfig, fontProviders } from "astro/config";
 import emdash from "emdash/astro";
 import { afterwordEmailPlugin } from "./src/plugins/afterword-email/index";
@@ -107,9 +107,9 @@ export default defineConfig({
 			database: d1({ binding: "DB", session: "auto" }),
 			storage: r2({ binding: "MEDIA" }),
 			plugins: [
-				atprotoPlugin(),
+				atprotoPlugin,
 				formsPlugin(),
-				webhookNotifierPlugin(),
+				webhookNotifierPlugin,
 				afterwordEmailPlugin(),
 				embedsPlugin(),
 			],
