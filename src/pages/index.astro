@@ -5,6 +5,7 @@ import Base from "../layouts/Base.astro";
 import WidgetRenderer from "../components/WidgetRenderer.astro";
 import { getImageUrl, formatDisplayDate } from "../lib/afterword";
 import { getStatusFeedPage, type StatusFeedItem } from "../lib/status-feed";
+import { getLatestTrack } from "../lib/media";
 import {
 	PUBLIC_ARCHIVE_CACHE_CONTROL,
 	getPostStringField,
@@ -14,7 +15,7 @@ import {
 
 Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
 
-const [statusPage, fieldNotesResult, homeIntroSection] = await Promise.all([
+const [statusPage, fieldNotesResult, homeIntroSection, latestTrack] = await Promise.all([
 	getStatusFeedPage({ limit: 5, includeReplies: false }),
 	getEmDashCollection("posts", {
 		status: "published",
@@ -22,6 +23,7 @@ const [statusPage, fieldNotesResult, homeIntroSection] = await Promise.all([
 		limit: 80,
 	}),
 	getSection("home-intro"),
+	getLatestTrack(),
 ]);
 
 Astro.cache.set(fieldNotesResult.cacheHint);
@@ -341,15 +343,72 @@ function getVideoLabel(post: StatusFeedItem) {
 		<section class="section-block section-block-track">
 			<div class="section-head">
 				<h2 class="section-title">Latest Track</h2>
-				<a class="home-updates__more-link" href="/media" data-astro-prefetch="viewport">
+				<a class="home-updates__more-link" href="/music" data-astro-prefetch="viewport">
 					More music <span aria-hidden="true">→</span>
 				</a>
 			</div>
 			<div class="home-track">
-				<script
-					is:inline
-					src="https://scripts.brebs.net/crucial-tracks/crucial-tracks.js?user=bryan&desc"
-				></script>
+				{latestTrack ? (
+					<article class="home-track-card">
+						{latestTrack.imageUrl ? (
+							<a class="home-track-card__cover" href={latestTrack.href}>
+								<img
+									class="home-track-card__image"
+									src={latestTrack.imageUrl}
+									alt={latestTrack.imageAlt || latestTrack.title}
+									loading="lazy"
+									decoding="async"
+								/>
+							</a>
+						) : null}
+						<div class="home-track-card__body">
+							<time class="home-track-card__meta" datetime={latestTrack.dateIso}>
+								{latestTrack.dateLabel}
+							</time>
+							<h3 class="home-track-card__title">
+								<a href={latestTrack.href}>{latestTrack.title}</a>
+							</h3>
+							{latestTrack.artist ? <p class="home-track-card__artist">{latestTrack.artist}</p> : null}
+							{latestTrack.summary ? <p class="home-track-card__summary">{latestTrack.summary}</p> : null}
+							<div class="home-track-card__actions">
+								<a class="tag-pill mixed-feed__action" href={latestTrack.href}>Open entry</a>
+								{latestTrack.links.map((link) => (
+									<a
+										class="tag-pill mixed-feed__action"
+										href={link.url}
+										target={link.external ? "_blank" : undefined}
+										rel={link.external ? "noreferrer" : undefined}
+									>
+										{link.label}
+									</a>
+								))}
+							</div>
+							{latestTrack.embedUrl ? (
+								<div class="home-track-card__embed">
+									<iframe
+										class="home-track-card__embed-frame"
+										title={`Listen to ${latestTrack.title}`}
+										src={latestTrack.embedUrl}
+										loading="lazy"
+										allow="autoplay *; encrypted-media *; fullscreen *; clipboard-write"
+										sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
+									></iframe>
+								</div>
+							) : latestTrack.audioUrl ? (
+								<div class="home-track-card__audio">
+									<audio
+										controls
+										preload="none"
+										src={latestTrack.audioUrl}
+										aria-label={`Preview ${latestTrack.title}`}
+									></audio>
+								</div>
+							) : null}
+						</div>
+					</article>
+				) : (
+					<p class="empty-state">No recent tracks are available yet.</p>
+				)}
 			</div>
 		</section>
 	</div>
@@ -377,7 +436,6 @@ function getVideoLabel(post: StatusFeedItem) {
 			const carouselStep = Number(carouselRoot?.getAttribute("data-carousel-step") || 1);
 			const prevButton = document.querySelector("[data-carousel-prev]");
 			const nextButton = document.querySelector("[data-carousel-next]");
-			const homeTrack = document.querySelector(".home-track");
 
 			function syncCarouselHeight() {
 				if (!carouselViewport || !carouselItems.length) return;
@@ -398,27 +456,6 @@ function getVideoLabel(post: StatusFeedItem) {
 				});
 
 				window.requestAnimationFrame(syncCarouselHeight);
-			}
-
-			function normalizeHomeTrack() {
-				if (!homeTrack) return;
-				homeTrack.querySelectorAll(".crucial_footer_button").forEach((button) => {
-					button.setAttribute("data-home-track-hidden", "");
-					button.closest("div[style*='text-align:center']")?.setAttribute("data-home-track-hidden", "");
-				});
-
-				homeTrack.querySelectorAll(".crucial_entry").forEach((entry) => {
-					entry.style.background = "transparent";
-					entry.style.padding = "0";
-					entry.style.borderRadius = "0";
-				});
-
-				homeTrack.querySelectorAll(".crucial_container").forEach((container) => {
-					container.style.background = "transparent";
-					container.style.padding = "0";
-					container.style.margin = "0";
-					container.style.maxWidth = "none";
-				});
 			}
 
 			if (carouselRoot && carouselItems.length) {
@@ -450,14 +487,6 @@ function getVideoLabel(post: StatusFeedItem) {
 				});
 			}
 
-			normalizeHomeTrack();
-
-			if (homeTrack) {
-				const trackObserver = new MutationObserver(() => normalizeHomeTrack());
-				trackObserver.observe(homeTrack, { childList: true, subtree: true });
-				cleanupFns.push(() => trackObserver.disconnect());
-			}
-
 			const timer = window.setTimeout(() => {
 				warmRoute("/status");
 				warmRoute("/gallery");
@@ -484,4 +513,80 @@ function getVideoLabel(post: StatusFeedItem) {
 		initHomePage();
 
 	</script>
+	<style>
+		.home-track-card {
+			display: grid;
+			gap: 1rem;
+		}
+
+		.home-track-card__cover {
+			display: block;
+			text-decoration: none;
+		}
+
+		.home-track-card__image {
+			display: block;
+			width: min(100%, 18rem);
+			border-radius: 0.7rem;
+		}
+
+		.home-track-card__body {
+			display: grid;
+			gap: 0.8rem;
+		}
+
+		.home-track-card__meta {
+			color: var(--muted);
+			font-size: 0.8rem;
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+		}
+
+		.home-track-card__title {
+			margin: 0;
+			font-size: clamp(1.35rem, 2vw, 1.75rem);
+			line-height: 1.15;
+		}
+
+		.home-track-card__title a {
+			color: var(--text);
+			text-decoration: none;
+		}
+
+		.home-track-card__artist,
+		.home-track-card__summary {
+			margin: 0;
+		}
+
+		.home-track-card__artist {
+			color: var(--muted);
+		}
+
+		.home-track-card__summary {
+			line-height: 1.65;
+		}
+
+		.home-track-card__actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.55rem;
+		}
+
+		.home-track-card__embed {
+			width: 100%;
+		}
+
+		.home-track-card__embed-frame {
+			display: block;
+			width: 100%;
+			min-height: 190px;
+			border: 0;
+			border-radius: 0.7rem;
+			background: color-mix(in srgb, var(--surface) 26%, transparent);
+		}
+
+		.home-track-card__audio audio {
+			width: 100%;
+		}
+	</style>
 </Base>

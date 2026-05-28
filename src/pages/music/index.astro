@@ -1,26 +1,276 @@
 ---
 import Base from "../../layouts/Base.astro";
-import { getAlbums } from "../../lib/media";
+import { getMediaTimeline } from "../../lib/media";
 
-const albums = await getAlbums();
+const timelineItems = await getMediaTimeline(60);
+const items = timelineItems.filter((item) => item.kind === "track" || item.kind === "album");
 ---
 
-<Base title="Music" description="Albums from the listening rotation.">
-	<section class="stream-head">
-		<h1 class="stream-head__title">Music</h1>
-		<p class="stream-head__lede">Albums from the listening rotation.</p>
+<Base title="Music" description="Tracks from Crucial Tracks and albums from the listening rotation.">
+	<section class="section-block">
+		<h1 class="section-title">Music</h1>
+		<article class="content content-page">
+			<div class="post-full-content">
+				<section class="content-body">
+					<p>
+						Tracks from Crucial Tracks and albums from the listening rotation, kept together in one
+						stream.
+					</p>
+				</section>
+			</div>
+		</article>
 	</section>
 
-	<section class="blog-list blog-list--archive" aria-label="Albums">
-		{albums.map((album) => (
-			<article class="blog-row">
-				<a class="blog-row__link" href={album.localPath}>
-					<time class="blog-row__date" datetime={album.publishedAt.toISOString()}>{album.displayDate}</time>
-					<h2>{album.albumTitle}</h2>
-					<p>{album.artist}</p>
-					<span class="blog-row__read-more">Open album <span aria-hidden="true">→</span></span>
-				</a>
-			</article>
-		))}
-	</section>
+	{items.length ? (
+		<section class="section-block">
+			<div class="music-stream" aria-label="Music stream">
+				{items.map((item) => (
+					<article class="music-stream__entry" id={item.id}>
+						<div class="music-stream__meta-column">
+							<time class="music-stream__date" datetime={item.dateIso}>
+								{item.dateLabel}
+							</time>
+						</div>
+
+						<div class="music-stream__rail" aria-hidden="true">
+							<span class="music-stream__dot"></span>
+						</div>
+
+						<div class="music-stream__content">
+							<p class="music-stream__kicker">{item.label}</p>
+
+							<div class={`music-entry music-entry--${item.kind}`}>
+								{item.imageUrl ? (
+									<a class="music-entry__cover" href={item.href}>
+										<img
+											class="music-entry__art"
+											src={item.imageUrl}
+											alt={item.imageAlt || item.title}
+											loading="lazy"
+										/>
+									</a>
+								) : (
+									<div class="music-entry__fallback" aria-hidden="true">
+										{item.kind === "track" ? "Track" : "Album"}
+									</div>
+								)}
+
+								<div class="music-entry__body">
+									<h2 class="music-stream__title">
+										<a href={item.href}>{item.title}</a>
+									</h2>
+
+									{item.artist ? <p class="music-stream__credit">{item.artist}</p> : null}
+									{item.summary ? <p class="music-stream__summary">{item.summary}</p> : null}
+
+									<div class="music-stream__actions">
+										<a class="tag-pill music-stream__action" href={item.href}>Open entry</a>
+										{item.links.map((link) => (
+											<a
+												class="tag-pill music-stream__action"
+												href={link.url}
+												target={link.external ? "_blank" : undefined}
+												rel={link.external ? "noreferrer" : undefined}
+											>
+												{link.label}
+											</a>
+										))}
+									</div>
+
+									{item.embedUrl ? (
+										<div class="music-entry__embed">
+											<iframe
+												class="music-entry__embed-frame"
+												title={`Listen to ${item.title}`}
+												src={item.embedUrl}
+												loading="lazy"
+												allow="autoplay *; encrypted-media *; fullscreen *; clipboard-write"
+												sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
+											></iframe>
+										</div>
+									) : item.audioUrl ? (
+										<div class="music-entry__audio">
+											<audio controls preload="none" src={item.audioUrl} aria-label={`Preview ${item.title}`}></audio>
+										</div>
+									) : null}
+								</div>
+							</div>
+						</div>
+					</article>
+				))}
+			</div>
+		</section>
+	) : (
+		<section class="section-block">
+			<p class="empty-state">No music entries are available right now.</p>
+		</section>
+	)}
 </Base>
+
+<style>
+	.music-stream {
+		display: grid;
+		gap: 0;
+	}
+
+	.music-stream__entry {
+		display: grid;
+		grid-template-columns: minmax(4.6rem, 5.4rem) 1.1rem minmax(0, 1fr);
+		gap: 0 1rem;
+		padding: 1.1rem 0;
+	}
+
+	.music-stream__meta-column {
+		grid-column: 1;
+	}
+
+	.music-stream__date {
+		display: inline-block;
+		color: var(--muted);
+		font-size: 0.75rem;
+		line-height: 1.4;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.music-stream__rail {
+		position: relative;
+		grid-column: 2;
+	}
+
+	.music-stream__rail::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		bottom: -1.1rem;
+		left: 50%;
+		width: 1px;
+		background: color-mix(in srgb, var(--border) 80%, transparent);
+		transform: translateX(-50%);
+	}
+
+	.music-stream__entry:last-child .music-stream__rail::before {
+		bottom: 0;
+	}
+
+	.music-stream__dot {
+		position: absolute;
+		top: 0.3rem;
+		left: 50%;
+		width: 0.55rem;
+		height: 0.55rem;
+		border-radius: 999px;
+		background: var(--accent);
+		transform: translateX(-50%);
+	}
+
+	.music-stream__content {
+		grid-column: 3;
+		min-width: 0;
+	}
+
+	.music-stream__kicker {
+		margin: 0 0 0.75rem;
+		color: var(--muted);
+		font-size: 0.82rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.music-entry {
+		display: grid;
+		gap: 0.9rem;
+	}
+
+	.music-entry__cover,
+	.music-entry__fallback {
+		display: block;
+		width: min(100%, 18rem);
+	}
+
+	.music-entry__cover {
+		text-decoration: none;
+	}
+
+	.music-entry__art {
+		display: block;
+		width: 100%;
+		border-radius: 0.7rem;
+	}
+
+	.music-entry__fallback {
+		border-radius: 0.7rem;
+		background: color-mix(in srgb, var(--surface) 26%, transparent);
+		color: var(--muted);
+		padding: 2.2rem 1rem;
+		text-align: center;
+		font-size: 0.82rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.music-entry__body {
+		display: grid;
+		gap: 0.75rem;
+	}
+
+	.music-stream__title {
+		margin: 0;
+		font-size: 1.25rem;
+		line-height: 1.2;
+	}
+
+	.music-stream__title a {
+		color: var(--text);
+		text-decoration: none;
+	}
+
+	.music-stream__credit,
+	.music-stream__summary {
+		margin: 0;
+	}
+
+	.music-stream__credit {
+		color: var(--muted);
+	}
+
+	.music-stream__summary {
+		line-height: 1.65;
+	}
+
+	.music-stream__actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+	}
+
+	.music-entry__embed-frame {
+		display: block;
+		width: 100%;
+		min-height: 190px;
+		border: 0;
+		border-radius: 0.7rem;
+		background: color-mix(in srgb, var(--surface) 26%, transparent);
+	}
+
+	.music-entry__audio audio {
+		width: 100%;
+	}
+
+	@media (max-width: 720px) {
+		.music-stream__entry {
+			grid-template-columns: 1fr;
+			gap: 0.55rem;
+		}
+
+		.music-stream__meta-column,
+		.music-stream__rail,
+		.music-stream__content {
+			grid-column: auto;
+		}
+
+		.music-stream__rail {
+			display: none;
+		}
+	}
+</style>

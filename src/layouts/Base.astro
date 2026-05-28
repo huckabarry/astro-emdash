@@ -67,7 +67,6 @@ const fallbackPrimaryNavLinks: Array<{ href: string; labelKey: string; target?: 
 ];
 const footerNavLinks = [
 	{ href: "/hello", labelKey: "hello" },
-	{ href: "/about", labelKey: "about" },
 	{ href: "/colophon", labelKey: "colophon" },
 	{ href: "/subscribe", labelKey: "subscribe" },
 	{ href: "/check-ins/atlas", labelKey: "atlas" },
@@ -76,6 +75,7 @@ const footerWidgetArea = await getWidgetArea("footer");
 const hasSidebar = typeof sidebar === "boolean" ? sidebar : Astro.slots.has("sidebar");
 const subtitleSection = await getSection("subtitle");
 const primaryMenu = await getMenu("primary");
+const footerMenu = await getMenu("footer");
 
 const pageCtx = createPublicPageContext({
 	Astro,
@@ -150,10 +150,17 @@ const primaryNavLinks: NavLink[] = primaryMenu?.items?.length
 			label: navLabel(item.labelKey, currentLocale),
 			target: item.target ?? null,
 	  }));
-const localizedFooterNavLinks = footerNavLinks.map((item) => ({
-	href: localizePath(item.href, currentLocale),
-	label: footerLabel(item.labelKey),
-}));
+const localizedFooterNavLinks: NavLink[] = footerMenu?.items?.length
+	? footerMenu.items.map((item) => ({
+			href: normalizeMenuHref(item.url),
+			label: item.label,
+			target: item.target,
+	  }))
+	: footerNavLinks.map((item) => ({
+			href: localizePath(item.href, currentLocale),
+			label: footerLabel(item.labelKey),
+			target: null,
+	  }));
 const languageLinks = [
 	{
 		href: currentLocale === "it" ? Astro.url.pathname.replace(/^\/it(?=\/|$)/, "") || "/" : `/it${Astro.url.pathname === "/" ? "" : Astro.url.pathname}`,
@@ -254,7 +261,14 @@ const languageLinks = [
 					<div class="site-foot-nav">
 					{localizedFooterNavLinks.map((link, index) => (
 						<>
-							<a class="site-foot-nav-item" href={link.href}>{link.label}</a>
+							<a
+								class="site-foot-nav-item"
+								href={link.href}
+								target={link.target || undefined}
+								rel={link.target === "_blank" ? "noreferrer" : undefined}
+							>
+								{link.label}
+							</a>
 							{index < localizedFooterNavLinks.length - 1 && <span class="site-foot-separator">/</span>}
 						</>
 					))}
