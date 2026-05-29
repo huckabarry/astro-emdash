@@ -132,7 +132,9 @@ function wrapContentHook(entry) {
 				: event;
 		const result = await handler(nextEvent, ctx);
 		if (nextEvent && typeof nextEvent === "object" && "content" in nextEvent) {
-			await patchSyncedDocumentRecord(nextEvent, ctx);
+			after(async () => {
+				await patchSyncedDocumentRecord(nextEvent, ctx);
+			});
 		}
 		return result;
 	};
@@ -1088,12 +1090,6 @@ async function handleAdmin(input, ctx) {
 
 async function handlePageMetadata(event, ctx) {
 	await maybeRefreshPublication(ctx);
-	const content = event?.page?.content;
-	if (content?.collection && content) {
-		after(async () => {
-			await patchSyncedDocumentRecord({ collection: content.collection, content }, ctx);
-		});
-	}
 	const handler = getHookHandler(base?.hooks?.["page:metadata"]);
 	return handler ? handler(event, ctx) : null;
 }
