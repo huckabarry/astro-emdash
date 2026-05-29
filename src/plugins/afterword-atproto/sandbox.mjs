@@ -101,6 +101,20 @@ async function enrichContent(content, ctx) {
 	};
 }
 
+async function prepareContentForPublish(event, ctx) {
+	if (!event || typeof event !== "object" || !("content" in event)) {
+		return event;
+	}
+
+	const collection =
+		trimString(event.collection) ||
+		trimString(event.content?.collection) ||
+		trimString(event.content?.data?.collection);
+	const hydrated = collection ? await hydrateContentForCover(collection, event.content, ctx) : event.content;
+	const enriched = await enrichContent(hydrated, ctx);
+	return { ...event, content: enriched };
+}
+
 function getHookHandler(entry) {
 	if (!entry) return null;
 	return typeof entry === "function" ? entry : entry.handler;
@@ -111,10 +125,7 @@ function wrapHook(entry) {
 	if (!handler) return entry;
 
 	const wrapped = async (event, ctx) => {
-		const nextEvent =
-			event && typeof event === "object" && "content" in event
-				? { ...event, content: await enrichContent(event.content, ctx) }
-				: event;
+		const nextEvent = await prepareContentForPublish(event, ctx);
 		return handler(nextEvent, ctx);
 	};
 
@@ -126,10 +137,7 @@ function wrapContentHook(entry) {
 	if (!handler) return entry;
 
 	const wrapped = async (event, ctx) => {
-		const nextEvent =
-			event && typeof event === "object" && "content" in event
-				? { ...event, content: await enrichContent(event.content, ctx) }
-				: event;
+		const nextEvent = await prepareContentForPublish(event, ctx);
 		const result = await handler(nextEvent, ctx);
 		if (nextEvent && typeof nextEvent === "object" && "content" in nextEvent) {
 			after(async () => {
