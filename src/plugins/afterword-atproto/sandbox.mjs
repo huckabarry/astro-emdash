@@ -138,13 +138,7 @@ function wrapContentHook(entry) {
 
 	const wrapped = async (event, ctx) => {
 		const nextEvent = await prepareContentForPublish(event, ctx);
-		const result = await handler(nextEvent, ctx);
-		if (nextEvent && typeof nextEvent === "object" && "content" in nextEvent) {
-			after(async () => {
-				await patchSyncedDocumentRecord(nextEvent, ctx);
-			});
-		}
-		return result;
+		return handler(nextEvent, ctx);
 	};
 
 	return typeof entry === "function" ? wrapped : { ...entry, handler: wrapped };
