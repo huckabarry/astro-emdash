@@ -989,6 +989,41 @@ function buildCrosspostText({ template, title, url, excerpt }) {
 		.replace(/\{excerpt\}/g, excerpt);
 }
 
+async function buildCrosspostPayload(ctx, collection, content) {
+	const siteUrl = trimString(await ctx.kv.get("settings:siteUrl"));
+	if (!siteUrl) return null;
+
+	const title = contentValue(content, "title") || "Untitled";
+	const excerpt =
+		contentValue(content, "excerpt") ||
+		contentValue(content, "description") ||
+		deriveTextContent(content) ||
+		"";
+	const path = deriveContentPath(collection, content);
+	const url = path ? `${siteUrl.replace(/\/+$/, "")}${path}` : siteUrl;
+	const template = trimString(await ctx.kv.get("settings:crosspostTemplate"));
+	const text = truncateGraphemes(
+		template ? buildCrosspostText({ template, title, url, excerpt }) : excerpt || title,
+		300,
+	);
+	const langs = (trimString(await ctx.kv.get("settings:langs")) || "en")
+		.split(",")
+		.map((value) => value.trim())
+		.filter(Boolean)
+		.slice(0, 3);
+	const description = truncateGraphemes(excerpt, 300);
+	const facets = buildLinkFacets(text);
+
+	return {
+		url,
+		title,
+		description,
+		text,
+		langs,
+		facets,
+	};
+}
+
 function getImageStorageKey(image) {
 	const value = normalizeObjectValue(image);
 	if (!value) return null;
@@ -1190,7 +1225,7 @@ function normalizeAssociatedRefs(value) {
 }
 
 async function patchCrosspostExternal(ctx, postUri, options = {}) {
-	const { coverBlob = null, documentRef = null, publicationRef = null } = options;
+	const { coverBlob = null, documentRef = null, publicationRef = null, payload = null } = options;
 	const parsed = parseAtUri(postUri);
 	if (!parsed) return null;
 
@@ -1220,6 +1255,7 @@ async function patchCrosspostExternal(ctx, postUri, options = {}) {
 
 	const nextExternal = { ...external };
 	let changed = false;
+	const nextRecord = { ...record };
 
 	if (coverBlob) {
 		const existingRef = external.thumb?.ref?.$link;
@@ -1239,12 +1275,32 @@ async function patchCrosspostExternal(ctx, postUri, options = {}) {
 		}
 	}
 
+	if (payload?.text && payload.text !== record.text) {
+		nextRecord.text = payload.text;
+		changed = true;
+	}
+
+	const nextFacets = payload?.facets?.length ? payload.facets : undefined;
+	if (JSON.stringify(record.facets ?? []) !== JSON.stringify(nextFacets ?? [])) {
+		if (nextFacets?.length) {
+			nextRecord.facets = nextFacets;
+		} else {
+			delete nextRecord.facets;
+		}
+		changed = true;
+	}
+
+	if (payload?.langs?.length && JSON.stringify(record.langs ?? []) !== JSON.stringify(payload.langs)) {
+		nextRecord.langs = payload.langs;
+		changed = true;
+	}
+
 	if (!changed) {
 		return { uri: postUri, cid: body?.cid ?? null };
 	}
 
 	return putRecord(ctx, pdsHost, accessJwt, did, parsed.collection, parsed.rkey, {
-		...record,
+		...nextRecord,
 		embed: {
 			...embed,
 			external: nextExternal,
@@ -1255,42 +1311,29 @@ async function patchCrosspostExternal(ctx, postUri, options = {}) {
 async function createCrosspostRecord(ctx, collection, content, options = {}) {
 	const { coverBlob = null, documentRef = null, publicationRef = null } = options;
 	const { accessJwt, did, pdsHost } = await ensureAuth(ctx);
-	const siteUrl = trimString(await ctx.kv.get("settings:siteUrl"));
-	if (!siteUrl) return null;
-
-	const title = contentValue(content, "title") || "Untitled";
-	const excerpt = contentValue(content, "excerpt") || contentValue(content, "description") || "";
-	const path = deriveContentPath(collection, content);
-	const url = path ? `${siteUrl.replace(/\/+$/, "")}${path}` : siteUrl;
-	const template = trimString(await ctx.kv.get("settings:crosspostTemplate")) || "{title}\n\n{url}";
-	const text = truncateGraphemes(buildCrosspostText({ template, title, url, excerpt }), 300);
-	const langs = (trimString(await ctx.kv.get("settings:langs")) || "en")
-		.split(",")
-		.map((value) => value.trim())
-		.filter(Boolean)
-		.slice(0, 3);
+	const payload = await buildCrosspostPayload(ctx, collection, content);
+	if (!payload) return null;
 
 	const external = {
-		uri: url,
-		title,
-		description: truncateGraphemes(excerpt, 300),
+		uri: payload.url,
+		title: payload.title,
+		description: payload.description,
 		...(coverBlob ? { thumb: coverBlob } : {}),
 		associatedRefs: [documentRef, publicationRef].filter(Boolean),
 	};
 
 	const record = {
 		$type: "app.bsky.feed.post",
-		text,
+		text: payload.text,
 		createdAt: new Date().toISOString(),
-		...(langs.length ? { langs } : {}),
+		...(payload.langs.length ? { langs: payload.langs } : {}),
 		embed: {
 			$type: "app.bsky.embed.external",
 			external,
 		},
 	};
 
-	const facets = buildLinkFacets(text);
-	if (facets.length) record.facets = facets;
+	if (payload.facets.length) record.facets = payload.facets;
 
 	return createRecord(ctx, pdsHost, accessJwt, did, "app.bsky.feed.post", record);
 }
@@ -1410,6 +1453,7 @@ async function patchSyncedDocumentRecord(event, ctx, options = {}) {
 	const bskyPostUri = trimString(workingRecord.bskyPostRef?.uri) || trimString(synced.bskyPostUri);
 	const publicationUri = trimString(workingRecord.site) || trimString(await ctx.kv.get("state:publicationUri"));
 	if (bskyPostUri || publicationUri) {
+		const crosspostPayload = await buildCrosspostPayload(ctx, collection, content);
 		const publicationCid =
 			(publicationUri && publicationUri === trimString(await ctx.kv.get("state:publicationUri"))
 				? trimString(await ctx.kv.get("state:publicationCid"))
@@ -1421,6 +1465,7 @@ async function patchSyncedDocumentRecord(event, ctx, options = {}) {
 				coverBlob: includeThumb ? coverBlob : null,
 				documentRef,
 				publicationRef,
+				payload: crosspostPayload,
 			});
 		}
 		if (!updatedPost || updatedPost.missing) {
