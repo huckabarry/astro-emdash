@@ -14,10 +14,16 @@ const COVER_JPEG_QUALITIES = [82, 74, 68, 60, 52, 44];
 const COVER_SCALE_STEPS = [1, 0.85, 0.7, 0.55, 0.4, 0.3];
 const PUBLICATION_REFRESH_KEY = "state:publicationEnhancedAt";
 const PUBLICATION_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const DOCUMENT_REPAIR_PREFIX = "state:documentRepair:";
+const DOCUMENT_REPAIR_COOLDOWN_MS = 0;
 const MAX_TEXT_CONTENT_LENGTH = 10_000;
 const TAG_PREFIX_PATTERN = /^#/;
 const HTML_TAG_PATTERN = /<[^>]+>/g;
 const WHITESPACE_PATTERN = /\s+/g;
+const ENTRY_CONTENT_PATTERN =
+	/<div[^>]*class=["'][^"']*entry__content[^"']*e-content[^"']*["'][^>]*>([\s\S]*?)<\/div>/i;
+const PARAGRAPH_PATTERN = /<(p|li|h[1-6]|blockquote)[^>]*>([\s\S]*?)<\/\1>/gi;
+const BR_PATTERN = /<br\s*\/?>/gi;
 const PUBLICATION_METADATA_FALLBACKS = {
 	"https://afterword.blog": {
 		description: "Short updates, photos, and longer reflections on place, music, design, and daily life.",
@@ -32,6 +38,9 @@ const PUBLICATION_METADATA_FALLBACKS = {
 			accentForeground: { r: 30, g: 32, b: 33 },
 		},
 	},
+};
+const CANONICAL_FETCH_FALLBACKS = {
+	"https://afterword.blog": ["https://afterword-emdash-lab.bryan-robb.workers.dev"],
 };
 
 function withOrigin(url, origin) {
@@ -111,7 +120,8 @@ async function prepareContentForPublish(event, ctx) {
 		trimString(event.content?.collection) ||
 		trimString(event.content?.data?.collection);
 	const hydrated = collection ? await hydrateContentForCover(collection, event.content, ctx) : event.content;
-	const enriched = await enrichContent(hydrated, ctx);
+	const snapshot = collection ? await fetchCanonicalSnapshot(ctx, collection, hydrated) : null;
+	const enriched = await enrichContent(applyCanonicalSnapshot(hydrated, snapshot), ctx);
 	return { ...event, content: enriched };
 }
 
@@ -138,7 +148,9 @@ function wrapContentHook(entry) {
 
 	const wrapped = async (event, ctx) => {
 		const nextEvent = await prepareContentForPublish(event, ctx);
-		return handler(nextEvent, ctx);
+		const result = await handler(nextEvent, ctx);
+		await patchSyncedDocumentRecord(nextEvent, ctx, { includeCover: false, includeThumb: false });
+		return result;
 	};
 
 	return typeof entry === "function" ? wrapped : { ...entry, handler: wrapped };
@@ -190,6 +202,110 @@ function deriveTextContent(content) {
 	const normalized = decodeHtml(source).replace(HTML_TAG_PATTERN, " ").replace(WHITESPACE_PATTERN, " ").trim();
 	if (!normalized) return null;
 	return normalized.slice(0, MAX_TEXT_CONTENT_LENGTH);
+}
+
+function deriveContentPath(collection, content) {
+	const slug = contentValue(content, "slug");
+	if (!slug) return null;
+	return collection === "pages" ? `/${slug}` : `/${collection}/${slug}`;
+}
+
+function extractEntryHtml(html) {
+	const match = html.match(ENTRY_CONTENT_PATTERN);
+	return trimString(match?.[1] ?? null);
+}
+
+function stripHtmlToText(html) {
+	if (!html) return null;
+	const normalized = decodeHtml(html)
+		.replace(BR_PATTERN, " ")
+		.replace(HTML_TAG_PATTERN, " ")
+		.replace(WHITESPACE_PATTERN, " ")
+		.trim();
+	return normalized ? normalized.slice(0, MAX_TEXT_CONTENT_LENGTH) : null;
+}
+
+function extractPlaintextItems(html) {
+	if (!html) return [];
+
+	const items = [];
+	for (const match of html.matchAll(PARAGRAPH_PATTERN)) {
+		const text = stripHtmlToText(match[2]);
+		if (!text) continue;
+		items.push({
+			$type: "blog.afterword.block.text",
+			plaintext: text,
+		});
+	}
+
+	if (items.length) return items;
+
+	const fallback = stripHtmlToText(html);
+	return fallback
+		? [
+				{
+					$type: "blog.afterword.block.text",
+					plaintext: fallback,
+				},
+		  ]
+		: [];
+}
+
+function buildAfterwordContentPayload(snapshot, fallbackText = null) {
+	const items = snapshot?.entryHtml
+		? extractPlaintextItems(snapshot.entryHtml)
+		: fallbackText
+			? [{ $type: "blog.afterword.block.text", plaintext: fallbackText }]
+			: [];
+	if (!items.length) return null;
+
+	return {
+		$type: "blog.afterword.content",
+		items,
+		...(snapshot?.entryHtml ? { html: snapshot.entryHtml } : {}),
+	};
+}
+
+async function supportsSyndicatedCollection(ctx, collection) {
+	const configured = trimString(await ctx.kv.get("settings:collections"));
+	const allowed = configured
+		? configured
+				.split(",")
+				.map((value) => value.trim().toLowerCase())
+				.filter(Boolean)
+		: ["posts"];
+	return allowed.includes(String(collection || "").trim().toLowerCase());
+}
+
+function applyCanonicalSnapshot(content, snapshot) {
+	if (!snapshot || !content || typeof content !== "object" || Array.isArray(content)) {
+		return content;
+	}
+
+	const data =
+		typeof content.data === "object" && content.data && !Array.isArray(content.data) ? content.data : null;
+	const standardSiteContent = buildAfterwordContentPayload(snapshot, body);
+	const body = snapshot.textContent ?? null;
+	const coverImage = snapshot.coverImageUrl ?? null;
+
+	return {
+		...content,
+		...(body ? { body } : {}),
+		...(coverImage ? { cover_image: content.cover_image ?? coverImage } : {}),
+		...(standardSiteContent ? { standard_site_content: standardSiteContent } : {}),
+		...(data
+			? {
+					data: {
+						...data,
+						...(body ? { body: data.body ?? body } : {}),
+						...(coverImage ? { cover_image: data.cover_image ?? coverImage } : {}),
+						...(standardSiteContent
+							? { standard_site_content: data.standard_site_content ?? standardSiteContent }
+							: {}),
+					},
+			  }
+			: {}),
+	};
 }
 
 function normalizePdsHost(value) {
@@ -499,6 +615,55 @@ function absolutizeUrl(value, baseUrl) {
 	} catch {
 		return null;
 	}
+}
+
+async function fetchCanonicalSnapshot(ctx, collection, content) {
+	const siteUrl = trimString(await ctx.kv.get("settings:siteUrl")) || trimString(ctx.site?.url);
+	const path = deriveContentPath(collection, content);
+	if (!siteUrl || !path) return null;
+
+	const origins = [...new Set([siteUrl, ...(CANONICAL_FETCH_FALLBACKS[siteUrl] ?? [])].filter(Boolean))];
+	for (const origin of origins) {
+		let url;
+		try {
+			url = new URL(path, `${origin}/`);
+		} catch {
+			continue;
+		}
+
+		try {
+			const response = await pluginFetch(ctx, url.toString());
+			if (!response.ok) {
+				ctx.log.warn(`Failed to fetch canonical page for standard.site enrichment (${response.status}) ${url}`);
+				continue;
+			}
+
+			const html = await response.text();
+			const entryHtml = extractEntryHtml(html);
+			const textContent =
+				stripHtmlToText(entryHtml) ||
+				extractMetaContent(html, "name", "description") ||
+				extractMetaContent(html, "property", "og:description");
+			const coverImageUrl = absolutizeUrl(
+				extractMetaContent(html, "property", "og:image") || extractMetaContent(html, "name", "twitter:image"),
+				url.toString(),
+			);
+
+			return {
+				url: url.toString(),
+				entryHtml,
+				textContent,
+				coverImageUrl,
+			};
+		} catch (error) {
+			ctx.log.warn(
+				`Failed to fetch canonical page snapshot for ${collection}/${contentValue(content, "slug") ?? "unknown"} via ${origin}`,
+				error,
+			);
+		}
+	}
+
+	return null;
 }
 
 async function fetchPublicationMetadata(ctx, siteUrl) {
@@ -894,7 +1059,17 @@ async function patchCrosspostThumb(ctx, postUri, coverBlob) {
 	});
 }
 
-async function patchSyncedDocumentRecord(event, ctx) {
+function getStandardSiteContent(content) {
+	return content?.standard_site_content ?? contentData(content)?.standard_site_content ?? null;
+}
+
+function documentNeedsRepair(record) {
+	if (!record || typeof record !== "object") return false;
+	return !record.coverImage || !record.textContent || !record.content;
+}
+
+async function patchSyncedDocumentRecord(event, ctx, options = {}) {
+	const { includeCover = true, includeThumb = true } = options;
 	const collection = trimString(event?.collection);
 	let content = event?.content;
 	if (!collection || !content || typeof content !== "object") return;
@@ -947,7 +1122,19 @@ async function patchSyncedDocumentRecord(event, ctx) {
 		}
 	}
 
-	const coverBlob = await buildDocumentCoverBlob(ctx, content);
+	const standardSiteContent =
+		getStandardSiteContent(content) ||
+		buildAfterwordContentPayload(null, textContent || trimString(record.textContent) || trimString(record.description));
+	if (standardSiteContent) {
+		const existingContent = JSON.stringify(record.content ?? null);
+		const nextContent = JSON.stringify(standardSiteContent);
+		if (existingContent !== nextContent) {
+			nextRecord.content = standardSiteContent;
+			shouldUpdateRecord = true;
+		}
+	}
+
+	const coverBlob = includeCover ? await buildDocumentCoverBlob(ctx, content) : null;
 	if (coverBlob) {
 		const existingRef = record.coverImage?.ref?.$link;
 		const nextRef = coverBlob.ref?.$link;
@@ -957,7 +1144,7 @@ async function patchSyncedDocumentRecord(event, ctx) {
 		}
 
 		const bskyPostUri = trimString(record.bskyPostRef?.uri) || trimString(synced.bskyPostUri);
-		if (bskyPostUri) {
+		if (includeThumb && bskyPostUri) {
 			const updatedPost = await patchCrosspostThumb(ctx, bskyPostUri, coverBlob);
 			if (updatedPost?.uri && updatedPost?.cid) {
 				const existingPostCid = trimString(record.bskyPostRef?.cid);
@@ -968,7 +1155,9 @@ async function patchSyncedDocumentRecord(event, ctx) {
 			}
 		}
 	} else {
-		ctx.log.info(`No cover blob generated for ${collection}/${contentId}`);
+		if (includeCover) {
+			ctx.log.info(`No cover blob generated for ${collection}/${contentId}`);
+		}
 	}
 
 	if (!shouldUpdateRecord) return;
@@ -1061,6 +1250,39 @@ async function maybeRefreshPublication(ctx) {
 	}
 }
 
+async function shouldAttemptDocumentRepair(pageContent, ctx) {
+	const collection = trimString(pageContent?.collection);
+	const contentId = trimString(pageContent?.id);
+	if (!collection || !contentId) return false;
+	if (!(await supportsSyndicatedCollection(ctx, collection))) return false;
+
+	const cooldownKey = `${DOCUMENT_REPAIR_PREFIX}${collection}:${contentId}`;
+	const lastAttempt = trimString(await ctx.kv.get(cooldownKey));
+	if (lastAttempt) {
+		const elapsed = Date.now() - Date.parse(lastAttempt);
+		if (Number.isFinite(elapsed) && elapsed < DOCUMENT_REPAIR_COOLDOWN_MS) {
+			return false;
+		}
+	}
+
+	const synced = await ctx.storage.records.get(`${collection}:${contentId}`);
+	if (!synced?.atUri || synced.status !== "synced") return false;
+
+	const parsed = parseAtUri(synced.atUri);
+	if (!parsed) return false;
+
+	const { pdsHost } = await ensureAuth(ctx);
+	const url = new URL(xrpcUrl(pdsHost, "com.atproto.repo.getRecord"));
+	url.searchParams.set("repo", parsed.repo);
+	url.searchParams.set("collection", parsed.collection);
+	url.searchParams.set("rkey", parsed.rkey);
+
+	const response = await pluginFetch(ctx, url.toString());
+	if (!response.ok) return false;
+	const body = await parseJson(response, "getRecordForRepairCheck");
+	return documentNeedsRepair(body?.value);
+}
+
 async function handleAdmin(input, ctx) {
 	const type = input?.type ?? "page_load";
 	const actionId = input?.action_id ?? null;
@@ -1092,6 +1314,19 @@ async function handleAdmin(input, ctx) {
 
 async function handlePageMetadata(event, ctx) {
 	await maybeRefreshPublication(ctx);
+	const pageContent = event?.page?.content;
+	if (pageContent && (await shouldAttemptDocumentRepair(pageContent, ctx))) {
+		const collection = trimString(pageContent.collection);
+		const contentId = trimString(pageContent.id);
+		if (collection && contentId) {
+			await ctx.kv.set(`${DOCUMENT_REPAIR_PREFIX}${collection}:${contentId}`, new Date().toISOString());
+			await patchSyncedDocumentRecord(
+				{ collection, content: pageContent },
+				ctx,
+				{ includeCover: false, includeThumb: false },
+			);
+		}
+	}
 	const handler = getHookHandler(base?.hooks?.["page:metadata"]);
 	return handler ? handler(event, ctx) : null;
 }
