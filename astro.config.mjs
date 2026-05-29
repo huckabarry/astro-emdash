@@ -1,19 +1,26 @@
+import { fileURLToPath } from "node:url";
+
 import cloudflare from "@astrojs/cloudflare";
 import react from "@astrojs/react";
 import { d1, r2 } from "@emdash-cms/cloudflare";
-import atprotoPlugin from "@emdash-cms/plugin-atproto";
 import { embedsPlugin } from "@emdash-cms/plugin-embeds";
 import { formsPlugin } from "@emdash-cms/plugin-forms";
 import webhookNotifierPlugin from "@emdash-cms/plugin-webhook-notifier";
 import { defineConfig, fontProviders } from "astro/config";
 import emdash from "emdash/astro";
 import { afterwordEmailPlugin } from "./src/plugins/afterword-email/index";
+import atprotoPlugin from "./src/plugins/afterword-atproto/index.mjs";
 
 export default defineConfig({
 	site: "https://afterword.blog",
 	output: "server",
 	adapter: cloudflare(),
 	vite: {
+		resolve: {
+			alias: {
+				"afterword-atproto": fileURLToPath(new URL("./src/plugins/afterword-atproto", import.meta.url)),
+			},
+		},
 		optimizeDeps: {
 			exclude: [
 				"emdash",
