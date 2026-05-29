@@ -15,7 +15,7 @@ const COVER_SCALE_STEPS = [1, 0.85, 0.7, 0.55, 0.4, 0.3];
 const PUBLICATION_REFRESH_KEY = "state:publicationEnhancedAt";
 const PUBLICATION_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const DOCUMENT_REPAIR_PREFIX = "state:documentRepair:";
-const DOCUMENT_REPAIR_COOLDOWN_MS = 0;
+const DOCUMENT_REPAIR_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 const MAX_TEXT_CONTENT_LENGTH = 10_000;
 const TAG_PREFIX_PATTERN = /^#/;
 const HTML_TAG_PATTERN = /<[^>]+>/g;
@@ -50,10 +50,30 @@ function withOrigin(url, origin) {
 	return url;
 }
 
-function getFeaturedImageUrl(image, origin = "") {
-	if (!image || typeof image !== "object" || Array.isArray(image)) return null;
+function parseJsonMaybe(value) {
+	if (typeof value !== "string") return value;
+	const candidate = value.trim();
+	if (!candidate || (!candidate.startsWith("{") && !candidate.startsWith("["))) return value;
+	try {
+		return JSON.parse(candidate);
+	} catch {
+		return value;
+	}
+}
 
-	const value = image;
+function normalizeObjectValue(value) {
+	const parsed = parseJsonMaybe(value);
+	return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+}
+
+function normalizeArrayValue(value) {
+	const parsed = parseJsonMaybe(value);
+	return Array.isArray(parsed) ? parsed : null;
+}
+
+function getFeaturedImageUrl(image, origin = "") {
+	const value = normalizeObjectValue(image);
+	if (!value) return null;
 
 	if (typeof value.src === "string" && value.src.trim()) {
 		return withOrigin(value.src.trim(), origin);
@@ -81,7 +101,7 @@ function getFeaturedImageValue(content) {
 	if (!content || typeof content !== "object" || Array.isArray(content)) return null;
 	const data =
 		typeof content.data === "object" && content.data && !Array.isArray(content.data) ? content.data : null;
-	return content.featured_image ?? data?.featured_image ?? null;
+	return normalizeObjectValue(content.featured_image) ?? normalizeObjectValue(data?.featured_image) ?? null;
 }
 
 function deriveCoverImage(content, siteUrl = "") {
@@ -161,7 +181,7 @@ function trimString(value) {
 }
 
 function contentData(content) {
-	return typeof content?.data === "object" && content.data && !Array.isArray(content.data) ? content.data : null;
+	return normalizeObjectValue(content?.data);
 }
 
 function contentValue(content, key) {
@@ -189,7 +209,79 @@ function normalizeTags(content) {
 	return [...new Set(tags)];
 }
 
+function getPortableTextBlocks(content) {
+	const candidates = [
+		content?.content,
+		contentData(content)?.content,
+		content?.body,
+		contentData(content)?.body,
+	];
+
+	for (const candidate of candidates) {
+		const blocks = normalizeArrayValue(candidate);
+		if (blocks?.length) return blocks;
+	}
+
+	return null;
+}
+
+function collectPortableTextStrings(value, parts) {
+	if (!value) return;
+	if (typeof value === "string") {
+		const text = trimString(value);
+		if (text) parts.push(text);
+		return;
+	}
+	if (Array.isArray(value)) {
+		for (const entry of value) collectPortableTextStrings(entry, parts);
+		return;
+	}
+	if (typeof value !== "object") return;
+	if (typeof value.text === "string") {
+		const text = trimString(value.text);
+		if (text) parts.push(text);
+	}
+	if (Array.isArray(value.children)) collectPortableTextStrings(value.children, parts);
+	if (Array.isArray(value.items)) collectPortableTextStrings(value.items, parts);
+}
+
+function portableTextToPlainText(blocks) {
+	if (!Array.isArray(blocks) || !blocks.length) return null;
+
+	const segments = [];
+	for (const block of blocks) {
+		const parts = [];
+		collectPortableTextStrings(block, parts);
+		const text = parts.join(" ").replace(WHITESPACE_PATTERN, " ").trim();
+		if (text) segments.push(text);
+	}
+
+	if (!segments.length) return null;
+	return segments.join("\n\n").slice(0, MAX_TEXT_CONTENT_LENGTH);
+}
+
+function portableTextToItems(blocks) {
+	if (!Array.isArray(blocks) || !blocks.length) return [];
+
+	const items = [];
+	for (const block of blocks) {
+		const parts = [];
+		collectPortableTextStrings(block, parts);
+		const plaintext = parts.join(" ").replace(WHITESPACE_PATTERN, " ").trim();
+		if (!plaintext) continue;
+		items.push({
+			$type: "blog.afterword.block.text",
+			plaintext,
+		});
+	}
+
+	return items;
+}
+
 function deriveTextContent(content) {
+	const portableText = portableTextToPlainText(getPortableTextBlocks(content));
+	if (portableText) return portableText;
+
 	const source =
 		contentValue(content, "textContent") ||
 		contentValue(content, "body") ||
@@ -251,12 +343,14 @@ function extractPlaintextItems(html) {
 		: [];
 }
 
-function buildAfterwordContentPayload(snapshot, fallbackText = null) {
+function buildAfterwordContentPayload(snapshot, fallbackText = null, blocks = null) {
 	const items = snapshot?.entryHtml
 		? extractPlaintextItems(snapshot.entryHtml)
-		: fallbackText
-			? [{ $type: "blog.afterword.block.text", plaintext: fallbackText }]
-			: [];
+		: portableTextToItems(blocks).length
+			? portableTextToItems(blocks)
+			: fallbackText
+				? [{ $type: "blog.afterword.block.text", plaintext: fallbackText }]
+				: [];
 	if (!items.length) return null;
 
 	return {
@@ -284,8 +378,8 @@ function applyCanonicalSnapshot(content, snapshot) {
 
 	const data =
 		typeof content.data === "object" && content.data && !Array.isArray(content.data) ? content.data : null;
-	const standardSiteContent = buildAfterwordContentPayload(snapshot, body);
 	const body = snapshot.textContent ?? null;
+	const standardSiteContent = buildAfterwordContentPayload(snapshot, body, getPortableTextBlocks(content));
 	const coverImage = snapshot.coverImageUrl ?? null;
 
 	return {
@@ -843,10 +937,61 @@ function parseAtUri(atUri) {
 	};
 }
 
-function getImageStorageKey(image) {
-	if (!image || typeof image !== "object" || Array.isArray(image)) return null;
+function buildStrongRef(uri, cid) {
+	if (!uri || !cid) return null;
+	return {
+		$type: "com.atproto.repo.strongRef",
+		uri,
+		cid,
+	};
+}
 
-	const value = image;
+function stripTrailingPunctuation(value) {
+	return value.replace(/[.,;:!?'"]+$/g, "");
+}
+
+function truncateGraphemes(value, maxLength) {
+	const segments = [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(value)];
+	return segments.length <= maxLength
+		? value
+		: `${segments
+				.slice(0, Math.max(0, maxLength - 1))
+				.map((entry) => entry.segment)
+				.join("")}…`;
+}
+
+function buildLinkFacets(text) {
+	const facets = [];
+	const encoder = new TextEncoder();
+	const urlPattern = /https?:\/\/[^\s)>\]]+/g;
+
+	let match;
+	while ((match = urlPattern.exec(text)) !== null) {
+		const uri = stripTrailingPunctuation(match[0]);
+		const bytePrefix = encoder.encode(text.slice(0, match.index));
+		const byteValue = encoder.encode(uri);
+		facets.push({
+			index: {
+				byteStart: bytePrefix.length,
+				byteEnd: bytePrefix.length + byteValue.length,
+			},
+			features: [{ $type: "app.bsky.richtext.facet#link", uri }],
+		});
+	}
+
+	return facets;
+}
+
+function buildCrosspostText({ template, title, url, excerpt }) {
+	return template
+		.replace(/\{title\}/g, title)
+		.replace(/\{url\}/g, url)
+		.replace(/\{excerpt\}/g, excerpt);
+}
+
+function getImageStorageKey(image) {
+	const value = normalizeObjectValue(image);
+	if (!value) return null;
 	const asset = typeof value.asset === "object" && value.asset ? value.asset : null;
 	const meta = typeof value.meta === "object" && value.meta ? value.meta : null;
 
@@ -872,8 +1017,8 @@ function getImageStorageKey(image) {
 }
 
 function getImageContentType(image) {
-	if (!image || typeof image !== "object" || Array.isArray(image)) return null;
-	const value = image;
+	const value = normalizeObjectValue(image);
+	if (!value) return null;
 	if (typeof value.contentType === "string" && value.contentType.trim()) return value.contentType.trim();
 	if (typeof value.mimeType === "string" && value.mimeType.trim()) return value.mimeType.trim();
 	const asset = typeof value.asset === "object" && value.asset ? value.asset : null;
@@ -1013,7 +1158,39 @@ async function hydrateContentForCover(collection, content, ctx) {
 	}
 }
 
-async function patchCrosspostThumb(ctx, postUri, coverBlob) {
+async function resolveStrongRef(ctx, atUri, fallbackCid = null) {
+	if (!atUri) return null;
+	if (fallbackCid) return buildStrongRef(atUri, fallbackCid);
+
+	const parsed = parseAtUri(atUri);
+	if (!parsed) return null;
+
+	const { pdsHost } = await ensureAuth(ctx);
+	const url = new URL(xrpcUrl(pdsHost, "com.atproto.repo.getRecord"));
+	url.searchParams.set("repo", parsed.repo);
+	url.searchParams.set("collection", parsed.collection);
+	url.searchParams.set("rkey", parsed.rkey);
+
+	const response = await pluginFetch(ctx, url.toString());
+	if (!response.ok) return null;
+	const body = await parseJson(response, "getStrongRefRecord");
+	return buildStrongRef(atUri, trimString(body?.cid));
+}
+
+function normalizeAssociatedRefs(value) {
+	return Array.isArray(value)
+		? value
+				.map((entry) => ({
+					$type: "com.atproto.repo.strongRef",
+					uri: trimString(entry?.uri),
+					cid: trimString(entry?.cid),
+				}))
+				.filter((entry) => entry.uri && entry.cid)
+		: [];
+}
+
+async function patchCrosspostExternal(ctx, postUri, options = {}) {
+	const { coverBlob = null, documentRef = null, publicationRef = null } = options;
 	const parsed = parseAtUri(postUri);
 	if (!parsed) return null;
 
@@ -1025,8 +1202,8 @@ async function patchCrosspostThumb(ctx, postUri, coverBlob) {
 
 	const response = await pluginFetch(ctx, url.toString());
 	if (!response.ok) {
-		ctx.log.warn(`Failed to fetch synced Bluesky post for thumb patch (${response.status})`);
-		return null;
+		ctx.log.warn(`Failed to fetch synced Bluesky post for external patch (${response.status})`);
+		return { missing: true };
 	}
 
 	const body = await parseJson(response, "getBskyPostRecord");
@@ -1041,9 +1218,28 @@ async function patchCrosspostThumb(ctx, postUri, coverBlob) {
 	const external = embed.external;
 	if (!external || typeof external !== "object") return null;
 
-	const existingRef = external.thumb?.ref?.$link;
-	const nextRef = coverBlob.ref?.$link;
-	if (existingRef && nextRef && existingRef === nextRef) {
+	const nextExternal = { ...external };
+	let changed = false;
+
+	if (coverBlob) {
+		const existingRef = external.thumb?.ref?.$link;
+		const nextRef = coverBlob.ref?.$link;
+		if (!existingRef || !nextRef || existingRef !== nextRef) {
+			nextExternal.thumb = coverBlob;
+			changed = true;
+		}
+	}
+
+	const nextAssociatedRefs = [documentRef, publicationRef].filter(Boolean);
+	if (nextAssociatedRefs.length) {
+		const existingAssociatedRefs = normalizeAssociatedRefs(external.associatedRefs);
+		if (JSON.stringify(existingAssociatedRefs) !== JSON.stringify(nextAssociatedRefs)) {
+			nextExternal.associatedRefs = nextAssociatedRefs;
+			changed = true;
+		}
+	}
+
+	if (!changed) {
 		return { uri: postUri, cid: body?.cid ?? null };
 	}
 
@@ -1051,16 +1247,60 @@ async function patchCrosspostThumb(ctx, postUri, coverBlob) {
 		...record,
 		embed: {
 			...embed,
-			external: {
-				...external,
-				thumb: coverBlob,
-			},
+			external: nextExternal,
 		},
 	});
 }
 
+async function createCrosspostRecord(ctx, collection, content, options = {}) {
+	const { coverBlob = null, documentRef = null, publicationRef = null } = options;
+	const { accessJwt, did, pdsHost } = await ensureAuth(ctx);
+	const siteUrl = trimString(await ctx.kv.get("settings:siteUrl"));
+	if (!siteUrl) return null;
+
+	const title = contentValue(content, "title") || "Untitled";
+	const excerpt = contentValue(content, "excerpt") || contentValue(content, "description") || "";
+	const path = deriveContentPath(collection, content);
+	const url = path ? `${siteUrl.replace(/\/+$/, "")}${path}` : siteUrl;
+	const template = trimString(await ctx.kv.get("settings:crosspostTemplate")) || "{title}\n\n{url}";
+	const text = truncateGraphemes(buildCrosspostText({ template, title, url, excerpt }), 300);
+	const langs = (trimString(await ctx.kv.get("settings:langs")) || "en")
+		.split(",")
+		.map((value) => value.trim())
+		.filter(Boolean)
+		.slice(0, 3);
+
+	const external = {
+		uri: url,
+		title,
+		description: truncateGraphemes(excerpt, 300),
+		...(coverBlob ? { thumb: coverBlob } : {}),
+		associatedRefs: [documentRef, publicationRef].filter(Boolean),
+	};
+
+	const record = {
+		$type: "app.bsky.feed.post",
+		text,
+		createdAt: new Date().toISOString(),
+		...(langs.length ? { langs } : {}),
+		embed: {
+			$type: "app.bsky.embed.external",
+			external,
+		},
+	};
+
+	const facets = buildLinkFacets(text);
+	if (facets.length) record.facets = facets;
+
+	return createRecord(ctx, pdsHost, accessJwt, did, "app.bsky.feed.post", record);
+}
+
 function getStandardSiteContent(content) {
-	return content?.standard_site_content ?? contentData(content)?.standard_site_content ?? null;
+	return (
+		normalizeObjectValue(content?.standard_site_content) ??
+		normalizeObjectValue(contentData(content)?.standard_site_content) ??
+		null
+	);
 }
 
 function documentNeedsRepair(record) {
@@ -1124,7 +1364,11 @@ async function patchSyncedDocumentRecord(event, ctx, options = {}) {
 
 	const standardSiteContent =
 		getStandardSiteContent(content) ||
-		buildAfterwordContentPayload(null, textContent || trimString(record.textContent) || trimString(record.description));
+		buildAfterwordContentPayload(
+			null,
+			textContent || trimString(record.textContent) || trimString(record.description),
+			getPortableTextBlocks(content),
+		);
 	if (standardSiteContent) {
 		const existingContent = JSON.stringify(record.content ?? null);
 		const nextContent = JSON.stringify(standardSiteContent);
@@ -1134,7 +1378,7 @@ async function patchSyncedDocumentRecord(event, ctx, options = {}) {
 		}
 	}
 
-	const coverBlob = includeCover ? await buildDocumentCoverBlob(ctx, content) : null;
+	const coverBlob = includeCover && !record.coverImage ? await buildDocumentCoverBlob(ctx, content) : null;
 	if (coverBlob) {
 		const existingRef = record.coverImage?.ref?.$link;
 		const nextRef = coverBlob.ref?.$link;
@@ -1142,34 +1386,82 @@ async function patchSyncedDocumentRecord(event, ctx, options = {}) {
 			nextRecord.coverImage = coverBlob;
 			shouldUpdateRecord = true;
 		}
-
-		const bskyPostUri = trimString(record.bskyPostRef?.uri) || trimString(synced.bskyPostUri);
-		if (includeThumb && bskyPostUri) {
-			const updatedPost = await patchCrosspostThumb(ctx, bskyPostUri, coverBlob);
-			if (updatedPost?.uri && updatedPost?.cid) {
-				const existingPostCid = trimString(record.bskyPostRef?.cid);
-				if (existingPostCid !== updatedPost.cid || record.bskyPostRef?.uri !== updatedPost.uri) {
-					nextRecord.bskyPostRef = { uri: updatedPost.uri, cid: updatedPost.cid };
-					shouldUpdateRecord = true;
-				}
-			}
-		}
 	} else {
 		if (includeCover) {
 			ctx.log.info(`No cover blob generated for ${collection}/${contentId}`);
 		}
 	}
 
+	let workingRecord = shouldUpdateRecord ? nextRecord : record;
+	let workingCid = trimString(body?.cid);
+	if (shouldUpdateRecord) {
+		const updatedDocument = await putRecord(ctx, pdsHost, accessJwt, did, DOCUMENT_COLLECTION, parsed.rkey, nextRecord);
+		workingCid = updatedDocument.cid;
+		workingRecord = { ...nextRecord };
+		await ctx.storage.records.put(`${collection}:${contentId}`, {
+			...synced,
+			atCid: updatedDocument.cid,
+			lastSyncedAt: new Date().toISOString(),
+			status: "synced",
+		});
+	}
+
+	const documentRef = buildStrongRef(synced.atUri, workingCid);
+	const bskyPostUri = trimString(workingRecord.bskyPostRef?.uri) || trimString(synced.bskyPostUri);
+	const publicationUri = trimString(workingRecord.site) || trimString(await ctx.kv.get("state:publicationUri"));
+	if (bskyPostUri || publicationUri) {
+		const publicationCid =
+			(publicationUri && publicationUri === trimString(await ctx.kv.get("state:publicationUri"))
+				? trimString(await ctx.kv.get("state:publicationCid"))
+				: null) || null;
+		const publicationRef = publicationUri ? await resolveStrongRef(ctx, publicationUri, publicationCid) : null;
+		let updatedPost = null;
+		if (bskyPostUri) {
+			updatedPost = await patchCrosspostExternal(ctx, bskyPostUri, {
+				coverBlob: includeThumb ? coverBlob : null,
+				documentRef,
+				publicationRef,
+			});
+		}
+		if (!updatedPost || updatedPost.missing) {
+			updatedPost = await createCrosspostRecord(ctx, collection, content, {
+				coverBlob: includeThumb ? coverBlob : null,
+				documentRef,
+				publicationRef,
+			});
+		}
+		if (updatedPost?.uri && updatedPost?.cid) {
+			const existingPostCid = trimString(workingRecord.bskyPostRef?.cid);
+			if (existingPostCid !== updatedPost.cid || workingRecord.bskyPostRef?.uri !== updatedPost.uri) {
+				workingRecord = {
+					...workingRecord,
+					bskyPostRef: { uri: updatedPost.uri, cid: updatedPost.cid },
+				};
+				const finalDocument = await putRecord(
+					ctx,
+					pdsHost,
+					accessJwt,
+					did,
+					DOCUMENT_COLLECTION,
+					parsed.rkey,
+					workingRecord,
+				);
+				workingCid = finalDocument.cid;
+				await ctx.storage.records.put(`${collection}:${contentId}`, {
+					...synced,
+					atCid: finalDocument.cid,
+					bskyPostUri: updatedPost.uri,
+					bskyPostCid: updatedPost.cid,
+					lastSyncedAt: new Date().toISOString(),
+					status: "synced",
+				});
+				ctx.log.info(`Patched site.standard.document metadata for ${collection}/${contentId}`);
+				return;
+			}
+		}
+	}
+
 	if (!shouldUpdateRecord) return;
-
-	const result = await putRecord(ctx, pdsHost, accessJwt, did, DOCUMENT_COLLECTION, parsed.rkey, nextRecord);
-
-	await ctx.storage.records.put(`${collection}:${contentId}`, {
-		...synced,
-		atCid: result.cid,
-		lastSyncedAt: new Date().toISOString(),
-		status: "synced",
-	});
 	ctx.log.info(`Patched site.standard.document metadata for ${collection}/${contentId}`);
 }
 
@@ -1280,7 +1572,24 @@ async function shouldAttemptDocumentRepair(pageContent, ctx) {
 	const response = await pluginFetch(ctx, url.toString());
 	if (!response.ok) return false;
 	const body = await parseJson(response, "getRecordForRepairCheck");
-	return documentNeedsRepair(body?.value);
+	if (documentNeedsRepair(body?.value)) return true;
+
+	const bskyPostUri =
+		trimString(body?.value?.bskyPostRef?.uri) || trimString(synced.bskyPostUri);
+	if (!bskyPostUri) return false;
+
+	const post = parseAtUri(bskyPostUri);
+	if (!post) return false;
+	const postUrl = new URL(xrpcUrl(pdsHost, "com.atproto.repo.getRecord"));
+	postUrl.searchParams.set("repo", post.repo);
+	postUrl.searchParams.set("collection", post.collection);
+	postUrl.searchParams.set("rkey", post.rkey);
+	const postResponse = await pluginFetch(ctx, postUrl.toString());
+	if (!postResponse.ok) return true;
+	const postBody = await parseJson(postResponse, "getCrosspostForRepairCheck");
+	const external = postBody?.value?.embed?.external;
+	if (!external || typeof external !== "object") return false;
+	return normalizeAssociatedRefs(external.associatedRefs).length < 2;
 }
 
 async function handleAdmin(input, ctx) {
@@ -1315,15 +1624,23 @@ async function handleAdmin(input, ctx) {
 async function handlePageMetadata(event, ctx) {
 	await maybeRefreshPublication(ctx);
 	const pageContent = event?.page?.content;
-	if (pageContent && (await shouldAttemptDocumentRepair(pageContent, ctx))) {
+	if (pageContent) {
 		const collection = trimString(pageContent.collection);
 		const contentId = trimString(pageContent.id);
-		if (collection && contentId) {
-			await ctx.kv.set(`${DOCUMENT_REPAIR_PREFIX}${collection}:${contentId}`, new Date().toISOString());
-			await patchSyncedDocumentRecord(
-				{ collection, content: pageContent },
-				ctx,
-				{ includeCover: false, includeThumb: false },
+		try {
+			const needsRepair = await shouldAttemptDocumentRepair(pageContent, ctx);
+			if (needsRepair && collection && contentId) {
+				await ctx.kv.set(`${DOCUMENT_REPAIR_PREFIX}${collection}:${contentId}`, new Date().toISOString());
+				await patchSyncedDocumentRecord(
+					{ collection, content: pageContent },
+					ctx,
+					{ includeCover: true, includeThumb: true },
+				);
+			}
+		} catch (error) {
+			ctx.log.warn(
+				`Failed to repair standard.site document during page metadata for ${collection ?? "unknown"}/${contentId ?? "unknown"}`,
+				error,
 			);
 		}
 	}
@@ -1346,6 +1663,35 @@ export default {
 			handler: async (_input, ctx) => {
 				try {
 					return await syncPublication(ctx);
+				} catch (error) {
+					return {
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					};
+				}
+			},
+		},
+		"repair-document": {
+			handler: async ({ input }, ctx) => {
+				try {
+					const collection = trimString(input?.collection);
+					const contentId = trimString(input?.contentId);
+					if (!collection || !contentId) {
+						return { success: false, error: "collection and contentId are required" };
+					}
+					if (!ctx.content?.get) {
+						return { success: false, error: "content loader unavailable" };
+					}
+					const content = await ctx.content.get(collection, contentId);
+					if (!content) {
+						return { success: false, error: `content not found for ${collection}/${contentId}` };
+					}
+					await patchSyncedDocumentRecord(
+						{ collection, content },
+						ctx,
+						{ includeCover: true, includeThumb: true },
+					);
+					return { success: true, collection, contentId };
 				} catch (error) {
 					return {
 						success: false,
