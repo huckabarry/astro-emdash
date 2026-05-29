@@ -14,6 +14,10 @@ const COVER_JPEG_QUALITIES = [82, 74, 68, 60, 52, 44];
 const COVER_SCALE_STEPS = [1, 0.85, 0.7, 0.55, 0.4, 0.3];
 const PUBLICATION_REFRESH_KEY = "state:publicationEnhancedAt";
 const PUBLICATION_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const MAX_TEXT_CONTENT_LENGTH = 10_000;
+const TAG_PREFIX_PATTERN = /^#/;
+const HTML_TAG_PATTERN = /<[^>]+>/g;
+const WHITESPACE_PATTERN = /\s+/g;
 const PUBLICATION_METADATA_FALLBACKS = {
 	"https://afterword.blog": {
 		description: "Short updates, photos, and longer reflections on place, music, design, and daily life.",
@@ -128,7 +132,7 @@ function wrapContentHook(entry) {
 				: event;
 		const result = await handler(nextEvent, ctx);
 		if (nextEvent && typeof nextEvent === "object" && "content" in nextEvent) {
-			await patchSyncedDocumentCover(nextEvent, ctx);
+			await patchSyncedDocumentRecord(nextEvent, ctx);
 		}
 		return result;
 	};
@@ -138,6 +142,50 @@ function wrapContentHook(entry) {
 
 function trimString(value) {
 	return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function contentData(content) {
+	return typeof content?.data === "object" && content.data && !Array.isArray(content.data) ? content.data : null;
+}
+
+function contentValue(content, key) {
+	const direct = trimString(content?.[key]);
+	if (direct) return direct;
+	return trimString(contentData(content)?.[key]);
+}
+
+function normalizeTags(content) {
+	const candidates = content?.tags ?? contentData(content)?.tags;
+	if (!Array.isArray(candidates)) return [];
+
+	const tags = [];
+	for (const candidate of candidates) {
+		if (typeof candidate === "string") {
+			const tag = trimString(candidate.replace(TAG_PREFIX_PATTERN, ""));
+			if (tag) tags.push(tag);
+			continue;
+		}
+		if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+			const tag = trimString(candidate.name?.replace(TAG_PREFIX_PATTERN, ""));
+			if (tag) tags.push(tag);
+		}
+	}
+	return [...new Set(tags)];
+}
+
+function deriveTextContent(content) {
+	const source =
+		contentValue(content, "textContent") ||
+		contentValue(content, "body") ||
+		contentValue(content, "content") ||
+		contentValue(content, "text") ||
+		contentValue(content, "excerpt") ||
+		contentValue(content, "description");
+	if (!source) return null;
+
+	const normalized = decodeHtml(source).replace(HTML_TAG_PATTERN, " ").replace(WHITESPACE_PATTERN, " ").trim();
+	if (!normalized) return null;
+	return normalized.slice(0, MAX_TEXT_CONTENT_LENGTH);
 }
 
 function normalizePdsHost(value) {
@@ -796,7 +844,53 @@ async function hydrateContentForCover(collection, content, ctx) {
 	}
 }
 
-async function patchSyncedDocumentCover(event, ctx) {
+async function patchCrosspostThumb(ctx, postUri, coverBlob) {
+	const parsed = parseAtUri(postUri);
+	if (!parsed) return null;
+
+	const { accessJwt, did, pdsHost } = await ensureAuth(ctx);
+	const url = new URL(xrpcUrl(pdsHost, "com.atproto.repo.getRecord"));
+	url.searchParams.set("repo", parsed.repo);
+	url.searchParams.set("collection", parsed.collection);
+	url.searchParams.set("rkey", parsed.rkey);
+
+	const response = await pluginFetch(ctx, url.toString());
+	if (!response.ok) {
+		ctx.log.warn(`Failed to fetch synced Bluesky post for thumb patch (${response.status})`);
+		return null;
+	}
+
+	const body = await parseJson(response, "getBskyPostRecord");
+	const record = body?.value;
+	if (!record || typeof record !== "object") return null;
+
+	const embed = record.embed;
+	if (!embed || typeof embed !== "object" || embed.$type !== "app.bsky.embed.external") {
+		return null;
+	}
+
+	const external = embed.external;
+	if (!external || typeof external !== "object") return null;
+
+	const existingRef = external.thumb?.ref?.$link;
+	const nextRef = coverBlob.ref?.$link;
+	if (existingRef && nextRef && existingRef === nextRef) {
+		return { uri: postUri, cid: body?.cid ?? null };
+	}
+
+	return putRecord(ctx, pdsHost, accessJwt, did, parsed.collection, parsed.rkey, {
+		...record,
+		embed: {
+			...embed,
+			external: {
+				...external,
+				thumb: coverBlob,
+			},
+		},
+	});
+}
+
+async function patchSyncedDocumentRecord(event, ctx) {
 	const collection = trimString(event?.collection);
 	let content = event?.content;
 	if (!collection || !content || typeof content !== "object") return;
@@ -809,12 +903,6 @@ async function patchSyncedDocumentCover(event, ctx) {
 	const synced = await ctx.storage.records.get(`${collection}:${contentId}`);
 	if (!synced?.atUri || synced.status !== "synced") {
 		ctx.log.info(`No synced ATProto document record found for ${collection}/${contentId}`);
-		return;
-	}
-
-	const coverBlob = await buildDocumentCoverBlob(ctx, content);
-	if (!coverBlob) {
-		ctx.log.info(`No cover blob generated for ${collection}/${contentId}`);
 		return;
 	}
 
@@ -837,14 +925,51 @@ async function patchSyncedDocumentCover(event, ctx) {
 	const record = body?.value;
 	if (!record || typeof record !== "object") return;
 
-	const existingRef = record.coverImage?.ref?.$link;
-	const nextRef = coverBlob.ref?.$link;
-	if (existingRef && nextRef && existingRef === nextRef) return;
+	const nextRecord = { ...record };
+	let shouldUpdateRecord = false;
 
-	const result = await putRecord(ctx, pdsHost, accessJwt, did, DOCUMENT_COLLECTION, parsed.rkey, {
-		...record,
-		coverImage: coverBlob,
-	});
+	const textContent = deriveTextContent(content);
+	if (textContent && textContent !== record.textContent) {
+		nextRecord.textContent = textContent;
+		shouldUpdateRecord = true;
+	}
+
+	const tags = normalizeTags(content);
+	if (tags.length) {
+		const existingTags = Array.isArray(record.tags) ? record.tags : [];
+		if (JSON.stringify(existingTags) !== JSON.stringify(tags)) {
+			nextRecord.tags = tags;
+			shouldUpdateRecord = true;
+		}
+	}
+
+	const coverBlob = await buildDocumentCoverBlob(ctx, content);
+	if (coverBlob) {
+		const existingRef = record.coverImage?.ref?.$link;
+		const nextRef = coverBlob.ref?.$link;
+		if (!existingRef || !nextRef || existingRef !== nextRef) {
+			nextRecord.coverImage = coverBlob;
+			shouldUpdateRecord = true;
+		}
+
+		const bskyPostUri = trimString(record.bskyPostRef?.uri) || trimString(synced.bskyPostUri);
+		if (bskyPostUri) {
+			const updatedPost = await patchCrosspostThumb(ctx, bskyPostUri, coverBlob);
+			if (updatedPost?.uri && updatedPost?.cid) {
+				const existingPostCid = trimString(record.bskyPostRef?.cid);
+				if (existingPostCid !== updatedPost.cid || record.bskyPostRef?.uri !== updatedPost.uri) {
+					nextRecord.bskyPostRef = { uri: updatedPost.uri, cid: updatedPost.cid };
+					shouldUpdateRecord = true;
+				}
+			}
+		}
+	} else {
+		ctx.log.info(`No cover blob generated for ${collection}/${contentId}`);
+	}
+
+	if (!shouldUpdateRecord) return;
+
+	const result = await putRecord(ctx, pdsHost, accessJwt, did, DOCUMENT_COLLECTION, parsed.rkey, nextRecord);
 
 	await ctx.storage.records.put(`${collection}:${contentId}`, {
 		...synced,
@@ -852,7 +977,7 @@ async function patchSyncedDocumentCover(event, ctx) {
 		lastSyncedAt: new Date().toISOString(),
 		status: "synced",
 	});
-	ctx.log.info(`Patched site.standard.document cover image for ${collection}/${contentId}`);
+	ctx.log.info(`Patched site.standard.document metadata for ${collection}/${contentId}`);
 }
 
 async function publicationNeedsRefresh(ctx) {
@@ -966,7 +1091,7 @@ async function handlePageMetadata(event, ctx) {
 	const content = event?.page?.content;
 	if (content?.collection && content) {
 		after(async () => {
-			await patchSyncedDocumentCover({ collection: content.collection, content }, ctx);
+			await patchSyncedDocumentRecord({ collection: content.collection, content }, ctx);
 		});
 	}
 	const handler = getHookHandler(base?.hooks?.["page:metadata"]);
