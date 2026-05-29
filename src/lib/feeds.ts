@@ -13,12 +13,14 @@ import { getStatusFeedPage } from "./status-feed";
 
 export type FeedItem = {
 	id: string;
-	title: string;
+	title?: string;
 	path: string;
 	url: string;
 	date: Date;
 	description: string;
+	summary?: string;
 	contentHtml?: string;
+	contentText?: string;
 	section: string;
 };
 
@@ -68,6 +70,14 @@ function renderFeedImage(image: unknown, siteUrl: string, fallbackAlt: string, s
 
 	seenImages.add(src);
 	return `<p><img src="${escapeHtml(src)}" alt="${escapeHtml(getImageAlt(image, fallbackAlt))}" /></p>`;
+}
+
+function resolveFeedUrl(siteUrl: string, value: string | null | undefined) {
+	const normalized = String(value || "").trim();
+	if (!normalized) return null;
+	if (/^https?:\/\//i.test(normalized)) return normalized;
+	if (normalized.startsWith("/")) return `${siteUrl}${normalized}`;
+	return `${siteUrl}/${normalized.replace(/^\/+/, "")}`;
 }
 
 function renderPortableTextSpans(children: unknown, markDefs: unknown) {
@@ -250,6 +260,95 @@ function getStatusDescription(post: Awaited<ReturnType<typeof getStatusFeedPage>
 	return "Status update";
 }
 
+function buildMediaFeedLead(item: Awaited<ReturnType<typeof getMediaTimeline>>[number]) {
+	const credit = item.artist || item.credit || "";
+	if (item.kind === "track") {
+		return credit ? `Listening to ${item.title} by ${credit}.` : `Listening to ${item.title}.`;
+	}
+	if (item.kind === "album") {
+		return credit ? `Album rotation: ${item.title} by ${credit}.` : `Album rotation: ${item.title}.`;
+	}
+	return credit ? `${item.label}: ${item.title} by ${credit}.` : `${item.label}: ${item.title}.`;
+}
+
+function buildMediaFeedText(item: Awaited<ReturnType<typeof getMediaTimeline>>[number]) {
+	return [buildMediaFeedLead(item), item.summary].filter(Boolean).join(" ");
+}
+
+function buildMediaFeedHtml(item: Awaited<ReturnType<typeof getMediaTimeline>>[number], siteUrl: string) {
+	const parts: string[] = [];
+	const entryUrl = resolveFeedUrl(siteUrl, item.href) || `${siteUrl}/media`;
+
+	parts.push(`<p>${escapeHtml(buildMediaFeedLead(item))}</p>`);
+
+	if (item.summary) {
+		parts.push(`<p>${escapeHtml(item.summary)}</p>`);
+	}
+
+	if (item.imageUrl) {
+		parts.push(
+			`<p><a href="${escapeHtml(entryUrl)}"><img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.imageAlt || item.title)}" /></a></p>`,
+		);
+	}
+
+	const links = [
+		{ label: "Open entry", url: entryUrl },
+		...(item.links || []).map((link) => ({ label: link.label, url: link.url })),
+	]
+		.filter((link) => String(link.url || "").trim())
+		.slice(0, 4);
+
+	if (links.length) {
+		parts.push(
+			`<p>${links
+				.map((link) => `<a href="${escapeHtml(link.url)}">${escapeHtml(link.label)}</a>`)
+				.join(" · ")}</p>`,
+		);
+	}
+
+	return parts.join("\n");
+}
+
+function buildCheckinFeedText(item: Awaited<ReturnType<typeof getCheckins>>[number]) {
+	return [item.place ? `${item.name} — ${item.place}.` : `${item.name}.`, item.excerpt || item.note || ""]
+		.filter(Boolean)
+		.join(" ");
+}
+
+function buildCheckinFeedHtml(item: Awaited<ReturnType<typeof getCheckins>>[number], siteUrl: string) {
+	const parts: string[] = [];
+	const entryUrl = resolveFeedUrl(siteUrl, item.canonicalPath || `/check-ins/${item.slug}`) || `${siteUrl}/check-ins`;
+	const images = Array.from(new Set([item.coverImage, ...item.photoUrls].filter(Boolean))).slice(0, 4);
+
+	parts.push(`<p>${escapeHtml(item.place ? `${item.name} — ${item.place}.` : `${item.name}.`)}</p>`);
+
+	if (item.excerpt || item.note) {
+		parts.push(`<p>${escapeHtml(item.excerpt || item.note)}</p>`);
+	}
+
+	for (const imageUrl of images) {
+		parts.push(
+			`<p><a href="${escapeHtml(entryUrl)}"><img src="${escapeHtml(String(imageUrl))}" alt="${escapeHtml(item.name)}" /></a></p>`,
+		);
+	}
+
+	const links = [
+		{ label: "Open entry", url: entryUrl },
+		item.appleMapsUrl ? { label: "Apple Maps", url: item.appleMapsUrl } : null,
+		item.website ? { label: "Website", url: item.website } : null,
+	].filter(Boolean) as { label: string; url: string }[];
+
+	if (links.length) {
+		parts.push(
+			`<p>${links
+				.map((link) => `<a href="${escapeHtml(link.url)}">${escapeHtml(link.label)}</a>`)
+				.join(" · ")}</p>`,
+		);
+	}
+
+	return parts.join("\n");
+}
+
 export function jsonResponse(data: unknown) {
 	return new Response(JSON.stringify(data, null, 2), {
 		headers: {
@@ -275,20 +374,32 @@ export function jsonFeedResponse(options: {
 		feed_url: `${siteUrl}${path}`,
 		description: String(description || ""),
 		authors: [{ name: "Bryan Robb" }],
-		items: items.map((item) => {
-			const contentHtml = String(item.contentHtml || "").trim();
-			const contentText = stripHtml(contentHtml) || String(item.description || "").trim();
-			return {
-				id: String(item.id),
-				url: String(item.url),
-				title: String(item.title || ""),
-				content_html: contentHtml || `<p>${escapeHtml(contentText)}</p>`,
-				content_text: contentText,
-				date_published: item.date.toISOString(),
-				tags: [String(item.section || "").trim()].filter(Boolean),
-			};
-		}),
-	};
+			items: items.map((item) => {
+				const contentHtml = String(item.contentHtml || "").trim();
+				const contentText =
+					String(item.contentText || "").trim() ||
+					stripHtml(contentHtml) ||
+					String(item.description || "").trim();
+				const entry: Record<string, unknown> = {
+					id: String(item.id),
+					url: String(item.url),
+					content_html: contentHtml || `<p>${escapeHtml(contentText)}</p>`,
+					content_text: contentText,
+					date_published: item.date.toISOString(),
+					tags: [String(item.section || "").trim()].filter(Boolean),
+				};
+
+				if (item.title && String(item.title).trim()) {
+					entry.title = String(item.title).trim();
+				}
+
+				if (item.summary && String(item.summary).trim()) {
+					entry.summary = String(item.summary).trim();
+				}
+
+				return entry;
+			}),
+		};
 
 	return new Response(JSON.stringify(feed, null, 2), {
 		headers: {
@@ -310,13 +421,15 @@ export function xmlFeedResponse(options: {
 
 	const body = items
 		.map((item) => {
-			const descriptionText = escapeXml(item.description);
+			const descriptionText = escapeXml(item.summary || item.description);
 			const content = item.contentHtml
 				? `\n      <content:encoded><![CDATA[${item.contentHtml}]]></content:encoded>`
 				: "";
+			const title = item.title && String(item.title).trim()
+				? `\n      <title>${escapeXml(String(item.title))}</title>`
+				: "";
 
-			return `    <item>
-      <title>${escapeXml(item.title)}</title>
+			return `    <item>${title}
       <link>${escapeXml(item.url)}</link>
       <guid isPermaLink="true">${escapeXml(item.url)}</guid>
       <pubDate>${item.date.toUTCString()}</pubDate>
@@ -370,6 +483,7 @@ export async function getWritingFeedItems(site: URL | undefined, url: URL) {
 			url: `${siteUrl}/posts/${post.id}`,
 			date: post.data.publishedAt as Date,
 			description: stripHtml(String(post.data.excerpt || "")),
+			summary: stripHtml(String(post.data.excerpt || "")),
 			contentHtml: buildPostFeedHtml(post, siteUrl),
 			section: "Writing",
 		} satisfies FeedItem));
@@ -404,6 +518,7 @@ export async function getPlanningFeedItems(site: URL | undefined, url: URL) {
 			url: `${siteUrl}/posts/${post.id}`,
 			date: post.data.publishedAt as Date,
 			description: stripHtml(String(post.data.excerpt || "")),
+			summary: stripHtml(String(post.data.excerpt || "")),
 			contentHtml: buildPostFeedHtml(post, siteUrl),
 			section: "Planning",
 		} satisfies FeedItem));
@@ -415,12 +530,12 @@ export async function getStatusFeedItems(site: URL | undefined, url: URL) {
 
 	return page.statuses.map((post) => ({
 		id: post.slug,
-		title: stripHtml(post.text).slice(0, 80) || "Status update",
 		path: `/status/${post.slug}`,
 		url: `${siteUrl}/status/${post.slug}`,
 		date: post.date,
 		description: getStatusDescription(post),
 		contentHtml: buildStatusFeedHtml(post),
+		contentText: stripHtml(post.text),
 		section: "Status",
 	} satisfies FeedItem));
 }
@@ -431,11 +546,12 @@ export async function getMediaFeedItems(site: URL | undefined, url: URL) {
 
 	return items.map((item) => ({
 		id: item.id,
-		title: item.title,
 		path: `/media#${item.id}`,
 		url: `${siteUrl}/media#${item.id}`,
 		date: new Date(item.dateIso),
-		description: item.summary || item.label,
+		description: buildMediaFeedText(item),
+		contentHtml: buildMediaFeedHtml(item, siteUrl),
+		contentText: buildMediaFeedText(item),
 		section: "Media",
 	} satisfies FeedItem));
 }
@@ -446,11 +562,12 @@ export async function getCheckinFeedItems(site: URL | undefined, url: URL) {
 
 	return items.slice(0, 30).map((item) => ({
 		id: item.slug,
-		title: item.name,
 		path: item.canonicalPath || `/check-ins/${item.slug}`,
 		url: item.canonicalPath ? `${siteUrl}${item.canonicalPath}` : `${siteUrl}/check-ins/${item.slug}`,
 		date: item.visitedAt,
-		description: item.excerpt || item.note || item.place || "Check-in",
+		description: buildCheckinFeedText(item),
+		contentHtml: buildCheckinFeedHtml(item, siteUrl),
+		contentText: buildCheckinFeedText(item),
 		section: "Check-ins",
 	} satisfies FeedItem));
 }

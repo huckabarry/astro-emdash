@@ -1,6 +1,7 @@
 ---
 import Base from "../../layouts/Base.astro";
 
+const siteUrl = "https://afterword.blog";
 const feeds = [
 	{
 		title: "Tutto",
@@ -24,13 +25,36 @@ const feeds = [
 		title: "Stato",
 		description: "Aggiornamenti brevi pubblicati da Bluesky sul sito.",
 		rssUrl: "/status/feed.xml",
-		jsonUrl: "/status/feed-public.json",
+		jsonUrl: "/status/feed.json",
 	},
 	{
 		title: "Media",
 		description: "Album, brani, libri, film e serie dalla timeline media.",
 		rssUrl: "/media/feed.xml",
 		jsonUrl: "/media/feed.json",
+	},
+];
+
+const microblogFeeds = [
+	{
+		title: "Writing JSON Feed",
+		description: "Post lunghi con titolo, riassunto, HTML completo e immagini inline.",
+		url: `${siteUrl}/feed.json`,
+	},
+	{
+		title: "Status JSON Feed",
+		description: "Micro post senza titoli finti, con foto e media dentro il contenuto.",
+		url: `${siteUrl}/status/feed.json`,
+	},
+	{
+		title: "Media JSON Feed",
+		description: "Ascolti e media con artwork incluso direttamente nel contenuto del post.",
+		url: `${siteUrl}/media/feed.json`,
+	},
+	{
+		title: "Everything JSON Feed",
+		description: "Il flusso pubblico completo, con post lunghi e micro post insieme.",
+		url: `${siteUrl}/everything/feed.json`,
 	},
 ];
 ---
@@ -48,6 +72,23 @@ const feeds = [
 						Il modo piu semplice per seguire Afterword adesso e dal tuo reader. RSS di solito
 						e la scelta piu semplice, ma ho incluso anche i feed JSON.
 					</p>
+
+					<section class="subscribe-microblog">
+						<h2>Import in Micro.blog</h2>
+						<p>
+							Se vuoi importare Afterword in Micro.blog, questi URL JSON Feed sono il
+							punto di partenza migliore. Writing e Status sono la coppia piu pulita.
+						</p>
+						<div class="subscribe-copy-list">
+							{microblogFeeds.map((feed) => (
+								<section class="subscribe-copy-card">
+									<h3>{feed.title}</h3>
+									<p>{feed.description}</p>
+									<input class="subscribe-copy-input" type="text" readonly value={feed.url} />
+								</section>
+							))}
+						</div>
+					</section>
 
 					<div class="subscribe-feed-list">
 						{feeds.map((feed) => (
@@ -76,6 +117,47 @@ const feeds = [
 	.subscribe-feed-list {
 		display: grid;
 		gap: 1rem;
+	}
+
+	.subscribe-microblog {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.subscribe-microblog h2 {
+		margin: 0;
+	}
+
+	.subscribe-copy-list {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.subscribe-copy-card {
+		padding: 1.1rem 1.2rem;
+		border: 1px solid rgba(245, 241, 171, 0.18);
+		border-radius: 1rem;
+		background: rgba(255, 255, 255, 0.02);
+	}
+
+	.subscribe-copy-card h3 {
+		margin: 0 0 0.45rem;
+		font-size: 1rem;
+	}
+
+	.subscribe-copy-card p {
+		margin: 0 0 0.85rem;
+	}
+
+	.subscribe-copy-input {
+		width: 100%;
+		padding: 0.7rem 0.8rem;
+		border: 1px solid rgba(245, 241, 171, 0.18);
+		border-radius: 0.45rem;
+		background: rgba(0, 0, 0, 0.2);
+		color: inherit;
+		font: inherit;
+		font-family: var(--font-mono, "IBM Plex Mono", monospace);
 	}
 
 	.subscribe-feed-card {

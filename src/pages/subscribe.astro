@@ -1,6 +1,7 @@
 ---
 import Base from "../layouts/Base.astro";
 
+const siteUrl = "https://afterword.blog";
 const feeds = [
 	{
 		title: "Everything",
@@ -24,13 +25,36 @@ const feeds = [
 		title: "Status",
 		description: "Short updates pulled from Bluesky into the site.",
 		rssUrl: "/status/feed.xml",
-		jsonUrl: "/status/feed-public.json",
+		jsonUrl: "/status/feed.json",
 	},
 	{
 		title: "Media",
 		description: "Albums, songs, books, movies, and shows from the media timeline.",
 		rssUrl: "/media/feed.xml",
 		jsonUrl: "/media/feed.json",
+	},
+];
+
+const microblogFeeds = [
+	{
+		title: "Writing JSON Feed",
+		description: "Longer posts with titles, summaries, full HTML, and inline images.",
+		url: `${siteUrl}/feed.json`,
+	},
+	{
+		title: "Status JSON Feed",
+		description: "Micro posts without fake titles, with inline photos and media.",
+		url: `${siteUrl}/status/feed.json`,
+	},
+	{
+		title: "Media JSON Feed",
+		description: "Listening and watching entries with artwork inside the post content.",
+		url: `${siteUrl}/media/feed.json`,
+	},
+	{
+		title: "Everything JSON Feed",
+		description: "The full public stream, mixing long posts and micro posts.",
+		url: `${siteUrl}/everything/feed.json`,
 	},
 ];
 ---
@@ -48,6 +72,23 @@ const feeds = [
 						The cleanest way to follow Afterword right now is from your own reader. RSS is
 						usually the safest choice, but I’ve included JSON feeds too.
 					</p>
+
+					<section class="subscribe-microblog">
+						<h2>Micro.blog Imports</h2>
+						<p>
+							If you’re importing Afterword into Micro.blog, these JSON Feed URLs are the
+							best starting point. Writing and Status are the cleanest pair.
+						</p>
+						<div class="subscribe-copy-list">
+							{microblogFeeds.map((feed) => (
+								<section class="subscribe-copy-card">
+									<h3>{feed.title}</h3>
+									<p>{feed.description}</p>
+									<input class="subscribe-copy-input" type="text" readonly value={feed.url} />
+								</section>
+							))}
+						</div>
+					</section>
 
 					<div class="subscribe-feed-list">
 						{feeds.map((feed) => (
@@ -76,6 +117,47 @@ const feeds = [
 	.subscribe-feed-list {
 		display: grid;
 		gap: 1rem;
+	}
+
+	.subscribe-microblog {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.subscribe-microblog h2 {
+		margin: 0;
+	}
+
+	.subscribe-copy-list {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.subscribe-copy-card {
+		padding: 1.1rem 1.2rem;
+		border: 1px solid rgba(245, 241, 171, 0.18);
+		border-radius: 1rem;
+		background: rgba(255, 255, 255, 0.02);
+	}
+
+	.subscribe-copy-card h3 {
+		margin: 0 0 0.45rem;
+		font-size: 1rem;
+	}
+
+	.subscribe-copy-card p {
+		margin: 0 0 0.85rem;
+	}
+
+	.subscribe-copy-input {
+		width: 100%;
+		padding: 0.7rem 0.8rem;
+		border: 1px solid rgba(245, 241, 171, 0.18);
+		border-radius: 0.45rem;
+		background: rgba(0, 0, 0, 0.2);
+		color: inherit;
+		font: inherit;
+		font-family: var(--font-mono, "IBM Plex Mono", monospace);
 	}
 
 	.subscribe-feed-card {
