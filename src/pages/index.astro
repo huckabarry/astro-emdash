@@ -1,10 +1,8 @@
 ---
-import { getEmDashCollection, getSection, getWidgetArea } from "emdash";
+import { getEmDashCollection, getSection } from "emdash";
 import { PortableText } from "emdash/ui";
 import Base from "../layouts/Base.astro";
-import WidgetRenderer from "../components/WidgetRenderer.astro";
 import { getImageUrl, formatDisplayDate } from "../lib/afterword";
-import { getStatusFeedPage, type StatusFeedItem } from "../lib/status-feed";
 import { getLatestTrack } from "../lib/media";
 import {
 	PUBLIC_ARCHIVE_CACHE_CONTROL,
@@ -15,8 +13,7 @@ import {
 
 Astro.response.headers.set("Cache-Control", PUBLIC_ARCHIVE_CACHE_CONTROL);
 
-const [statusPage, fieldNotesResult, homeIntroSection, latestTrack] = await Promise.all([
-	getStatusFeedPage({ limit: 5, includeReplies: false }),
+const [fieldNotesResult, homeIntroSection, latestTrack] = await Promise.all([
 	getEmDashCollection("posts", {
 		status: "published",
 		orderBy: { published_at: "desc" },
@@ -36,27 +33,6 @@ const fieldNotesPosts = fieldNotesResult.entries
 		return !slugs.includes("now") && !PLANNING_TAG_SLUGS.some((slug) => slugs.includes(slug));
 	})
 	.slice(0, 6);
-const homeBelowStatusWidgetArea = await getWidgetArea("home-below-status");
-
-function formatStatusDate(value: Date) {
-	return new Intl.DateTimeFormat("en-US", {
-		month: "short",
-		day: "numeric",
-		year: "numeric",
-	}).format(value);
-}
-
-function socialRepostCount(post: StatusFeedItem) {
-	return (post.repostCount || 0) + (post.quoteCount || 0);
-}
-
-function getLocalStatusPath(slug: string) {
-	return `/status/${slug}`;
-}
-
-function getVideoLabel(post: StatusFeedItem) {
-	return post.video?.alt?.trim() || "Watch video on Bluesky";
-}
 ---
 
 <Base
@@ -78,225 +54,10 @@ function getVideoLabel(post: StatusFeedItem) {
 		</div>
 	</section>
 
-	<div class="section-stack">
-		<section class="section-block section-block-status">
-			<div class="section-head">
-				<h2 class="section-title">Recent Updates</h2>
-				<div class="home-updates__controls">
-					<button class="home-updates__button" type="button" data-carousel-prev aria-label="Show previous update">
-						Back
-					</button>
-					<button class="home-updates__button" type="button" data-carousel-next aria-label="Show next update">
-						Next
-					</button>
-				</div>
-			</div>
+		<div class="section-stack">
+			<!-- Homepage status carousel intentionally removed. Restore from git history if it belongs here again. -->
 
-			{statusPage.statuses.length ? (
-				<div class="home-updates section-block-status__card" data-carousel-root data-carousel-step="1">
-					<div class="home-updates__viewport" data-carousel-viewport>
-						<div class="home-updates__track">
-							{statusPage.statuses.map((post, index) => (
-								<article class="home-status-card h-entry" data-carousel-item hidden={index !== 0}>
-									{post.replyTo ? (
-										<p class="home-status-card__reply-context">
-											In reply to
-											<a href={post.replyTo.blueskyUrl} target="_blank" rel="noreferrer">
-												{post.replyTo.displayName || post.replyTo.handle}
-											</a>
-										</p>
-									) : null}
-									<div class="home-status-card__meta">
-										<div class="home-status-card__byline">
-											<span class="home-status-card__name p-author h-card">
-												<span class="p-name">{post.displayName}</span>
-												<span class="u-url" hidden>{post.blueskyUrl}</span>
-											</span>
-											<span class="home-status-card__handle p-nickname">{post.handle}</span>
-											<span aria-hidden="true">·</span>
-											<time class="dt-published" datetime={post.date.toISOString()}>
-												{formatStatusDate(post.date)}
-											</time>
-										</div>
-									</div>
-									<a class="u-url" href={getLocalStatusPath(post.slug)} hidden>
-										{getLocalStatusPath(post.slug)}
-									</a>
-									{post.html ? (
-										<a class="home-status-card__permalink u-url" href={getLocalStatusPath(post.slug)}>
-											<div class="home-status-card__content e-content" set:html={post.html}></div>
-										</a>
-									) : null}
-									{post.quotedPost ? (
-										<a class="status-quote" href={post.quotedPost.blueskyUrl} target="_blank" rel="noreferrer">
-											<div class="status-quote__meta">
-												{post.quotedPost.avatar ? (
-													<img
-														class="status-quote__avatar"
-														src={post.quotedPost.avatar}
-														alt={post.quotedPost.displayName}
-														loading="lazy"
-													/>
-												) : null}
-												<div class="status-quote__byline">
-													<strong>{post.quotedPost.displayName}</strong>
-													<span>{post.quotedPost.handle}</span>
-													<span>·</span>
-													<time datetime={post.quotedPost.date.toISOString()}>
-														{formatStatusDate(post.quotedPost.date)}
-													</time>
-												</div>
-											</div>
-											{post.quotedPost.html ? (
-												<div class="status-quote__content" set:html={post.quotedPost.html}></div>
-											) : null}
-											{post.quotedPost.images.length ? (
-												<div
-													class:list={[
-														"status-row__media",
-														"status-row__media--quoted",
-														post.quotedPost.images.length > 1 && "status-row__media--multi",
-													]}
-												>
-													{post.quotedPost.images.map((image) => (
-														<img src={image.thumb} alt={image.alt || "Quoted post image"} loading="lazy" />
-													))}
-												</div>
-											) : null}
-									{post.quotedPost.external ? (
-												<span class="status-card status-card--quoted">
-													{post.quotedPost.external.thumb ? (
-														<img
-															class="status-card__thumb"
-															src={post.quotedPost.external.thumb}
-															alt={post.quotedPost.external.title || post.quotedPost.external.domain}
-															loading="lazy"
-														/>
-													) : null}
-													<span class="status-card__domain">{post.quotedPost.external.domain}</span>
-													<strong class="status-card__title">{post.quotedPost.external.title}</strong>
-													{post.quotedPost.external.description ? (
-														<span class="status-card__description">
-															{post.quotedPost.external.description}
-														</span>
-													) : null}
-												</span>
-											) : null}
-										</a>
-									) : null}
-									{post.images.length ? (
-										<div
-											class:list={[
-												"status-row__media",
-												post.images.length > 1 && "status-row__media--multi",
-											]}
-										>
-											{post.images.map((image) => (
-												<a class="status-row__image" href={getLocalStatusPath(post.slug)}>
-													<img src={image.thumb} alt={image.alt || "Bluesky image"} loading="lazy" />
-												</a>
-											))}
-										</div>
-									) : null}
-									{post.external ? (
-										<a class="status-card" href={post.external.uri} target="_blank" rel="noreferrer">
-											{post.external.thumb ? (
-												<img
-													class="status-card__thumb"
-													src={post.external.thumb}
-													alt={post.external.title || post.external.domain}
-													loading="lazy"
-												/>
-											) : null}
-											<span class="status-card__domain">{post.external.domain}</span>
-											<strong class="status-card__title">{post.external.title}</strong>
-											{post.external.description ? (
-												<span class="status-card__description">{post.external.description}</span>
-											) : null}
-										</a>
-									) : null}
-									{post.video ? (
-										<a class="status-row__video" href={post.blueskyUrl} target="_blank" rel="noreferrer">
-											{post.video.thumbnail ? (
-												<span class="status-row__video-thumb-wrap">
-													<img
-														class="status-row__video-thumb"
-														src={post.video.thumbnail}
-														alt={getVideoLabel(post)}
-														loading="lazy"
-													/>
-													<span class="status-row__video-badge" aria-hidden="true">Video</span>
-												</span>
-											) : null}
-											<span class="status-row__video-link">{getVideoLabel(post)}</span>
-										</a>
-									) : null}
-									<div class="home-status-card__actions">
-										<div class="status-row__metrics">
-											<a class="status-row__action" href={getLocalStatusPath(post.slug)}>
-												<span class="status-row__icon" aria-hidden="true">
-													<svg viewBox="0 0 24 24" focusable="false">
-														<path d="M6.37 3.93c.53-.51 1.28-.83 2.35-.83h8.03c1.07 0 1.82.32 2.35.83.51.49.83 1.18.83 2.18v5.78c0 1-.32 1.69-.83 2.18-.53.51-1.28.83-2.35.83h-2.84l-4.1 4.1c-.24.24-.49.36-.79.36-.57 0-1.01-.42-1.01-.99V14.9H8.72c-1.07 0-1.82-.32-2.35-.83-.51-.49-.83-1.18-.83-2.18V6.11c0-1 .32-1.69.83-2.18Zm2.35.77c-.72 0-1.05.2-1.25.39-.18.17-.33.45-.33 1.02v5.78c0 .57.15.85.33 1.02.2.19.53.39 1.25.39h1.95v3.07l3.07-3.07h3.03c.72 0 1.05-.2 1.25-.39.18-.17.33-.45.33-1.02V6.11c0-.57-.15-.85-.33-1.02-.2-.19-.53-.39-1.25-.39H8.72Z"></path>
-													</svg>
-												</span>
-												<span>{post.replyCount}</span>
-											</a>
-											<a class="status-row__action" href={getLocalStatusPath(post.slug)}>
-												<span class="status-row__icon" aria-hidden="true">
-													<svg viewBox="0 0 24 24" focusable="false">
-														<path d="M5.05 4.86a.75.75 0 0 1 1.06 0l2.76 2.76a.75.75 0 1 1-1.06 1.06L6.33 7.2v7.05c0 .7.17 1.12.45 1.39.27.27.69.45 1.39.45h5.5a.75.75 0 0 1 0 1.5h-5.5c-1.02 0-1.87-.28-2.45-.86-.58-.58-.89-1.43-.89-2.48V7.2L3.99 8.68a.75.75 0 1 1-1.06-1.06l2.12-2.12Zm13.9 10.46a.75.75 0 0 1 1.06 1.06l-2.76 2.76a.75.75 0 0 1-1.06 0l-2.76-2.76a.75.75 0 1 1 1.06-1.06l1.48 1.48V9.75c0-.7-.17-1.12-.45-1.39-.27-.27-.69-.45-1.39-.45h-5.5a.75.75 0 0 1 0-1.5h5.5c1.02 0 1.87.28 2.45.86.58.58.89 1.43.89 2.48v7.05l1.48-1.48Z"></path>
-													</svg>
-												</span>
-												<span>{socialRepostCount(post)}</span>
-											</a>
-											<a class="status-row__action" href={getLocalStatusPath(post.slug)}>
-												<span class="status-row__icon" aria-hidden="true">
-													<svg viewBox="0 0 24 24" focusable="false">
-														<path d="M16.72 3.8c2.87 0 4.93 2.16 4.93 5.13 0 1.89-.77 3.32-2.08 4.7-1.28 1.35-3.09 2.71-5.17 4.28l-1.89 1.43a.82.82 0 0 1-1 0l-1.89-1.43c-2.08-1.57-3.89-2.93-5.17-4.28-1.31-1.38-2.08-2.81-2.08-4.7 0-2.97 2.06-5.13 4.93-5.13 1.79 0 3.03.89 3.83 1.83.35.41.64.85.87 1.25.23-.4.52-.84.87-1.25.8-.94 2.04-1.83 3.83-1.83Zm0 1.6c-1.19 0-2.02.56-2.61 1.25-.61.71-.96 1.53-1.12 2.03a.82.82 0 0 1-1.56 0c-.16-.5-.51-1.32-1.12-2.03-.59-.69-1.42-1.25-2.61-1.25-1.88 0-3.33 1.38-3.33 3.53 0 1.33.51 2.38 1.64 3.57 1.15 1.21 2.82 2.47 4.94 4.08L12 17.68l1.84-1.39c2.12-1.61 3.79-2.87 4.94-4.08 1.13-1.19 1.64-2.24 1.64-3.57 0-2.15-1.45-3.53-3.33-3.53Z"></path>
-													</svg>
-												</span>
-												<span>{post.likeCount}</span>
-											</a>
-										</div>
-										<div class="status-row__reply-pills">
-											<a class="status-row__reply-pill" href={post.blueskyUrl} target="_blank" rel="noreferrer">
-												<span class="status-row__reply-pill-icon" aria-hidden="true">
-													<svg viewBox="0 0 24 24" focusable="false">
-														<path d="M5.69 4.78c2.35 1.76 4.88 5.33 5.81 7.27.93-1.94 3.46-5.51 5.81-7.27 1.69-1.27 4.43-2.26 4.43.87 0 .63-.36 5.29-.57 6.05-.72 2.66-3.35 3.34-5.69 2.94 4.09.7 5.13 3.04 2.88 5.39-4.27 4.46-6.14-1.12-6.62-2.55-.09-.26-.13-.38-.24-.38s-.15.12-.24.38c-.48 1.43-2.35 7.01-6.62 2.55-2.25-2.35-1.21-4.69 2.88-5.39-2.34.4-4.97-.28-5.69-2.94-.21-.76-.57-5.42-.57-6.05 0-3.13 2.74-2.14 4.43-.87Z"></path>
-													</svg>
-												</span>
-												<span>Reply on Bluesky</span>
-											</a>
-										</div>
-									</div>
-								</article>
-							))}
-						</div>
-					</div>
-				</div>
-			) : (
-				<p class="empty-state">No recent updates are available yet.</p>
-			)}
-
-			<div class="home-stream-tags">
-				<a class="tag-pill" href="/status" data-astro-prefetch="viewport">Status</a>
-				<a class="home-updates__more-link" href="/status" data-astro-prefetch="viewport">
-					Read more updates <span aria-hidden="true">→</span>
-				</a>
-			</div>
-		</section>
-
-		{homeBelowStatusWidgetArea?.widgets.length ? (
-			<section class="section-block section-block-widget-area">
-				<div class="home-widget-area" aria-label={homeBelowStatusWidgetArea.label}>
-					{homeBelowStatusWidgetArea.widgets.map((widget) => (
-						<WidgetRenderer widget={widget} />
-					))}
-				</div>
-			</section>
-		) : null}
-
-		<section class="section-block section-block-writing">
+			<section class="section-block section-block-writing">
 			<h2 class="section-title">Field Notes</h2>
 			{fieldNotesPosts.length ? (
 				<section class="blog-list">
@@ -413,85 +174,27 @@ function getVideoLabel(post: StatusFeedItem) {
 		</section>
 	</div>
 
-	<script is:inline data-astro-rerun>
-		function warmRoute(href) {
+		<script is:inline data-astro-rerun>
+			function warmRoute(href) {
 			fetch(href, {
 				credentials: "omit",
 				headers: { "X-Afterword-Prefetch": "home" },
 			}).catch(() => {});
 		}
-		const homeState = window.__afterwordHome ??= {
-			initialized: false,
-			currentPage: 0,
-			cleanup() {},
-		};
+			const homeState = window.__afterwordHome ??= {
+				initialized: false,
+				cleanup() {},
+			};
 
-		function initHomePage() {
-			homeState.cleanup();
+			function initHomePage() {
+				homeState.cleanup();
 
-			const cleanupFns = [];
-			const carouselRoot = document.querySelector("[data-carousel-root]");
-			const carouselViewport = carouselRoot?.querySelector("[data-carousel-viewport]");
-			const carouselItems = carouselRoot ? Array.from(carouselRoot.querySelectorAll("[data-carousel-item]")) : [];
-			const carouselStep = Number(carouselRoot?.getAttribute("data-carousel-step") || 1);
-			const prevButton = document.querySelector("[data-carousel-prev]");
-			const nextButton = document.querySelector("[data-carousel-next]");
+				const cleanupFns = [];
 
-			function syncCarouselHeight() {
-				if (!carouselViewport || !carouselItems.length) return;
-				const visibleItem = carouselItems.find((item) => !item.hasAttribute("hidden"));
-				if (!visibleItem) return;
-				carouselViewport.style.height = `${visibleItem.offsetHeight}px`;
-			}
-
-			function renderCarousel(page) {
-				if (!carouselItems.length) return;
-				const pageCount = Math.max(1, Math.ceil(carouselItems.length / Math.max(carouselStep, 1)));
-				homeState.currentPage = ((page % pageCount) + pageCount) % pageCount;
-				const start = homeState.currentPage * carouselStep;
-				const end = start + carouselStep;
-
-				carouselItems.forEach((item, index) => {
-					item.toggleAttribute("hidden", index < start || index >= end);
-				});
-
-				window.requestAnimationFrame(syncCarouselHeight);
-			}
-
-			if (carouselRoot && carouselItems.length) {
-				const onResize = () => syncCarouselHeight();
-				const showPrevious = (event) => {
-					event.preventDefault();
-					renderCarousel(homeState.currentPage - 1);
-				};
-				const showNext = (event) => {
-					event.preventDefault();
-					renderCarousel(homeState.currentPage + 1);
-				};
-
-				renderCarousel(homeState.currentPage);
-				window.addEventListener("resize", onResize, { passive: true });
-				prevButton?.addEventListener("click", showPrevious);
-				nextButton?.addEventListener("click", showNext);
-
-				cleanupFns.push(() => {
-					window.removeEventListener("resize", onResize);
-					prevButton?.removeEventListener("click", showPrevious);
-					nextButton?.removeEventListener("click", showNext);
-				});
-
-				carouselRoot.querySelectorAll("img").forEach((image) => {
-					if (!image.complete) {
-						image.addEventListener("load", syncCarouselHeight, { once: true });
-					}
-				});
-			}
-
-			const timer = window.setTimeout(() => {
-				warmRoute("/status");
-				warmRoute("/gallery");
-				warmRoute("/now");
-				warmRoute("/media");
+				const timer = window.setTimeout(() => {
+					warmRoute("/gallery");
+					warmRoute("/now");
+					warmRoute("/media");
 			}, 2000);
 
 			cleanupFns.push(() => window.clearTimeout(timer));
