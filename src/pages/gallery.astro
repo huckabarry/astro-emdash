@@ -108,10 +108,6 @@ function getGalleryVariantUrl(
 	sourceUrl: string,
 	imageIndex = 0,
 ) {
-	if (sourceUrl.includes("/_emdash/api/media/file/")) {
-		return sourceUrl;
-	}
-
 	const assetKey = getGalleryAssetKey(post, image, imageIndex);
 	const url = new URL(`/gallery-images/${preset}/${assetKey}`, Astro.url.origin);
 	url.searchParams.set("src", sourceUrl);
