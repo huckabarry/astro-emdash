@@ -162,14 +162,14 @@ function wrapHook(entry) {
 	return typeof entry === "function" ? wrapped : { ...entry, handler: wrapped };
 }
 
-function wrapContentHook(entry) {
+function wrapContentHook(entry, patchOptions = {}) {
 	const handler = getHookHandler(entry);
 	if (!handler) return entry;
 
 	const wrapped = async (event, ctx) => {
 		const nextEvent = await prepareContentForPublish(event, ctx);
 		const result = await handler(nextEvent, ctx);
-		await patchSyncedDocumentRecord(nextEvent, ctx, { includeCover: false, includeThumb: false });
+		await patchSyncedDocumentRecord(nextEvent, ctx, patchOptions);
 		return result;
 	};
 
@@ -1352,7 +1352,7 @@ function documentNeedsRepair(record) {
 }
 
 async function patchSyncedDocumentRecord(event, ctx, options = {}) {
-	const { includeCover = true, includeThumb = true } = options;
+	const { includeCover = true, includeThumb = true, allowCreateCrosspost = false } = options;
 	const collection = trimString(event?.collection);
 	let content = event?.content;
 	if (!collection || !content || typeof content !== "object") return;
@@ -1468,12 +1468,14 @@ async function patchSyncedDocumentRecord(event, ctx, options = {}) {
 				payload: crosspostPayload,
 			});
 		}
-		if (!updatedPost || updatedPost.missing) {
+		if ((!updatedPost || updatedPost.missing) && allowCreateCrosspost) {
 			updatedPost = await createCrosspostRecord(ctx, collection, content, {
 				coverBlob: includeThumb ? coverBlob : null,
 				documentRef,
 				publicationRef,
 			});
+		} else if ((!updatedPost || updatedPost.missing) && !allowCreateCrosspost) {
+			ctx.log.info(`Skipping crosspost creation during repair for ${collection}/${contentId}`);
 		}
 		if (updatedPost?.uri && updatedPost?.cid) {
 			const existingPostCid = trimString(workingRecord.bskyPostRef?.cid);
@@ -1697,8 +1699,16 @@ export default {
 	...base,
 	hooks: {
 		...(base.hooks || {}),
-		"content:afterSave": wrapContentHook(base?.hooks?.["content:afterSave"]),
-		"content:afterPublish": wrapContentHook(base?.hooks?.["content:afterPublish"]),
+		"content:afterSave": wrapContentHook(base?.hooks?.["content:afterSave"], {
+			includeCover: false,
+			includeThumb: false,
+			allowCreateCrosspost: false,
+		}),
+		"content:afterPublish": wrapContentHook(base?.hooks?.["content:afterPublish"], {
+			includeCover: true,
+			includeThumb: true,
+			allowCreateCrosspost: true,
+		}),
 		"page:metadata": handlePageMetadata,
 	},
 	routes: {
@@ -1734,7 +1744,7 @@ export default {
 					await patchSyncedDocumentRecord(
 						{ collection, content },
 						ctx,
-						{ includeCover: true, includeThumb: true },
+						{ includeCover: true, includeThumb: true, allowCreateCrosspost: false },
 					);
 					return { success: true, collection, contentId };
 				} catch (error) {
