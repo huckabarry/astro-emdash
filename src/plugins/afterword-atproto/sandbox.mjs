@@ -1670,27 +1670,6 @@ async function handleAdmin(input, ctx) {
 
 async function handlePageMetadata(event, ctx) {
 	await maybeRefreshPublication(ctx);
-	const pageContent = event?.page?.content;
-	if (pageContent) {
-		const collection = trimString(pageContent.collection);
-		const contentId = trimString(pageContent.id);
-		try {
-			const needsRepair = await shouldAttemptDocumentRepair(pageContent, ctx);
-			if (needsRepair && collection && contentId) {
-				await ctx.kv.set(`${DOCUMENT_REPAIR_PREFIX}${collection}:${contentId}`, new Date().toISOString());
-				await patchSyncedDocumentRecord(
-					{ collection, content: pageContent },
-					ctx,
-					{ includeCover: true, includeThumb: true },
-				);
-			}
-		} catch (error) {
-			ctx.log.warn(
-				`Failed to repair standard.site document during page metadata for ${collection ?? "unknown"}/${contentId ?? "unknown"}`,
-				error,
-			);
-		}
-	}
 	const handler = getHookHandler(base?.hooks?.["page:metadata"]);
 	return handler ? handler(event, ctx) : null;
 }
@@ -1699,11 +1678,7 @@ export default {
 	...base,
 	hooks: {
 		...(base.hooks || {}),
-		"content:afterSave": wrapContentHook(base?.hooks?.["content:afterSave"], {
-			includeCover: false,
-			includeThumb: false,
-			allowCreateCrosspost: false,
-		}),
+		"content:afterSave": wrapHook(base?.hooks?.["content:afterSave"]),
 		"content:afterPublish": wrapContentHook(base?.hooks?.["content:afterPublish"], {
 			includeCover: true,
 			includeThumb: true,
