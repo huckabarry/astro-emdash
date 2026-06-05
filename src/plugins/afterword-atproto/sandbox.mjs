@@ -1669,7 +1669,6 @@ async function handleAdmin(input, ctx) {
 }
 
 async function handlePageMetadata(event, ctx) {
-	await maybeRefreshPublication(ctx);
 	const handler = getHookHandler(base?.hooks?.["page:metadata"]);
 	return handler ? handler(event, ctx) : null;
 }
