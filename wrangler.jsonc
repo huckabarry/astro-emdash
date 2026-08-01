@@ -6,6 +6,9 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	"triggers": {
+		"crons": ["* * * * *"]
+	},
 	"vars": {
 		"ATPROTO_REPO": "did:plc:vt4k6d3e5rjw65cuzaf3nufq",
 		"MAILGUN_DOMAIN": "mg.afterword.blog",
