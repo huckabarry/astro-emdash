@@ -20,6 +20,9 @@
 	"assets": {
 		"directory": "./dist",
 	},
+	"kv_namespaces": [
+		{ "binding": "SESSION", "id": "b073c43e3f16401eb2beb6f384765a69" }
+	],
 	"d1_databases": [
 		{
 			"binding": "DB",
